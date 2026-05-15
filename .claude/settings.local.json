@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python *)",
+      "Bash(conda run *)",
+      "Bash(pip install *)",
+      "Bash(PYTHONPATH=src conda run *)"
+    ]
+  }
+}

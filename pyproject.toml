@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "fy3-cloudmask"
+version = "3.2.0"
+description = "FY-3D MERSI-II Cloud Mask Retrieval System - Python Implementation"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "FYLAT Team", email = "minmin@cma.gov.cn"},
+]
+dependencies = [
+    "numpy>=1.22",
+    "h5py>=3.7",
+    "pyhdf>=0.11",
+    "xarray>=2023.1",
+    "cfgrib>=0.9",
+    "pyyaml>=6.0",
+    "click>=8.0",
+    "numba>=0.57",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+docs = [
+    "sphinx>=5.0",
+]
+
+[project.scripts]
+fy3-cloudmask = "fy3_cloudmask.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"

@@ -1,0 +1,59 @@
+# FY-3D MERSI-II Cloud Mask System - Default Configuration
+
+sensor:
+  id: 21                    # 21=FY-3D, 22=FY-3E
+  n_elem: 2048
+  n_line: 2000
+
+paths:
+  code_root: ""
+  l1b_data_dir: ""
+  geo_data_dir: ""
+  nwp_data_dir: ""
+  oisst_data_dir: ""
+  output_dir: ""
+  coeff_dir: ""
+  thresholds_file: "config/thresholds/mersi_ii3d_v8.yaml"
+
+algorithms:
+  cloudmask: 1
+  cloudamount: 0
+  cloudphase: 0
+  cloudtopz: 0
+  cloudtau_day: 0
+  cloudtau_night: 0
+  cloudtype_ii: 0
+  surface_sst: 0
+  write_intermediate: 0
+
+nwp:
+  source_id: 5              # 5=GFS 0.5-degree
+  rtm_option: 0             # 0=RTM disabled, 1=RTM enabled
+  grib_file_1: ""
+  grib_file_2: ""
+
+processing:
+  year_start: 2020
+  month_start: 1
+  day_start: 1
+  year_end: 2020
+  month_end: 1
+  day_end: 1
+  hour_min: 0
+  hour_max: 24
+  n_threads: 1
+
+# Single-orbit input files
+geo_file: ""
+l1b_file: ""
+oisst_file: ""
+
+# Output product files
+output_clm: ""
+output_cla: ""
+output_clp: ""
+output_ctp: ""
+output_cot: ""
+output_con: ""
+output_sst: ""
+output_intermediate: ""

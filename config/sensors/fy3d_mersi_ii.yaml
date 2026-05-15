@@ -1,0 +1,55 @@
+# FY-3D MERSI-II Sensor Configuration
+
+sensor_id: 21
+name: "FY-3D MERSI-II"
+n_elem: 2048
+n_line: 2000
+n_channels: 25
+n_vis: 19
+n_ir: 6
+
+# Visible channel wavelengths (micrometers)
+vis_wavelengths:
+  - 0.470
+  - 0.550
+  - 0.650
+  - 0.860
+  - 1.380
+  - 1.640
+  - 2.130
+  - 0.410
+  - 0.440
+  - 0.490
+  - 0.555
+  - 0.670
+  - 0.709
+  - 0.746
+  - 0.865
+  - 0.905
+  - 0.936
+  - 0.940
+  - 1.030
+
+# IR channel wavelengths (micrometers) and wavenumbers (cm-1)
+ir_wavelengths: [3.800, 4.050, 7.230, 8.560, 10.710, 11.950]
+ir_wavenumbers: [2643.0, 2472.0, 1383.0, 1168.0, 933.0, 837.0]
+
+# Special band indices (0-based)
+bands:
+  vis_047: 0
+  vis_055: 1
+  vis_064: 2
+  vis_086: 3
+  vis_138: 4
+  vis_164: 5
+  vis_213: 6
+  vis_103: 18
+  ir_38: 19
+  ir_40: 20
+  ir_73: 21
+  ir_85: 22
+  ir_11: 23
+  ir_12: 24
+
+# For FY-3D (sensor_id > 20), bands 5 and 19 are swapped in pxldat
+swap_bands_5_19: true
