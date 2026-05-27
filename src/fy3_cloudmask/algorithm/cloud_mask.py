@@ -537,10 +537,10 @@ def run_cloud_mask_swath(
                 indat_3x3_11um=indat_3x3_11um,
                 indat_3x3_vis=indat_3x3_vis,
                 cm_array=cm_tmp,
-                row=j,
-                col=i,
-                n_rows=n_line,
-                n_cols=n_elem,
+                row=i,
+                col=j,
+                n_rows=n_elem,
+                n_cols=n_line,
             )
 
             cm_bitarray[i, j, :] = result.testbits

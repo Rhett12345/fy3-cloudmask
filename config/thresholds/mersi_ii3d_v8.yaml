@@ -737,14 +737,20 @@ shadows:
   ref_124: 0.2
 sunglint:
   vrat:
-  - 1.0
+  - 0.7
+  - 0.9
   - 1.1
+  - 1.0
   vrat_ch:
   - 0.95
+  - 1.05
   - 1.2
+  - 1.0
   vrat_cl:
+  - 1.0
   - 1.05
   - 1.05
+  - 1.0
   btd_lo: 13.0
   btd_hi: 30.0
   ratio: 3.0

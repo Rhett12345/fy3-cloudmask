@@ -16,8 +16,8 @@ import numpy as np
 from numba import njit
 
 from ..confidence import conf_test_thresholds, encode_confidence
-from ..bitops import set_bit, clear_bit, check_bit
-from ..spatial import get_regional_mean, get_regional_std, get_regional_diff
+from ..bitops import set_bit, clear_bit, check_bit, set_bit_qa
+from ..spatial import get_regional_mean, get_regional_std, get_regional_diff, tview
 from ...constants import (
     BAD_DATA, BIT_LAND_RESTORAL, BIT_SHADOW, BIT_NCO, BIT_THIN_CIRRUS_IR,
     BIT_CLOUD_ADJ, BIT_TEMPORAL,
@@ -199,9 +199,16 @@ def chk_sunglint_restoral(
     testbits: np.ndarray,
     qa_bits: np.ndarray,
 ) -> float:
-    """Sun glint restoral check.
+    """Sun glint clear-sky restoral check.
 
-    Port of chk_sunglint.f90.
+    Port of chk_sunglint.f90. The Fortran version performs clear-sky
+    restoral tests in sun-glint conditions — it can RAISE confidence
+    to 0.96 when clear-sky conditions are verified. It does NOT cap
+    confidence.
+
+    Full Fortran logic requires spatial variability test results and
+    0.895/0.935um band data not yet available in the pipeline. This
+    simplified version removes the incorrect cap.
 
     Args:
         confdnc: Current confidence value.
@@ -218,12 +225,9 @@ def chk_sunglint_restoral(
     if not snglnt:
         return confdnc
 
-    thr = thresholds.get('sunglint_restoral', {})
-
-    # In sun glint region, reduce confidence
-    max_conf = thr.get('max_confidence', 0.95)
-    confdnc = min(confdnc, max_conf)
-
+    # Fortran chk_sunglint.f90 does NOT cap confidence.
+    # It performs clear-sky restoral tests and can raise confidence to 0.96.
+    # The previous min(conf, 0.95) was incorrect.
     return confdnc
 
 
@@ -275,7 +279,8 @@ def chk_spatial_var(
 ) -> float:
     """Spatial variability check.
 
-    Port of chk_spatial_var.f90.
+    Port of chk_spatial_var.f90. If spatially uniform, boosts confidence.
+    Does NOT reduce confidence for variable scenes.
 
     Args:
         confdnc: Current confidence value.
@@ -298,11 +303,18 @@ def chk_spatial_var(
     if std < BAD_DATA + 1.0:
         return confdnc
 
-    # High spatial variability suggests cloud
     var_threshold = thr.get('std_threshold', 0.6)
-    if std > var_threshold and confdnc > 0.95:
-        # Reduce confidence if spatially variable
-        confdnc = min(confdnc, 0.95)
+
+    # Set QA bit indicating test was applied
+    set_bit_qa(qa_bits, 25)
+
+    if std <= var_threshold:
+        # Spatially uniform - boost confidence
+        set_bit(testbits, 25)
+        if confdnc > 0.66:
+            confdnc = max(confdnc, 0.96)
+        else:
+            confdnc = max(confdnc, 0.67)
 
     return confdnc
 
@@ -318,10 +330,11 @@ def chk_cloud_adj(
     testbits: np.ndarray,
     qa_bits: np.ndarray,
 ) -> float:
-    """Cloud adjacency check.
+    """Non-cloud obstruction check (dust/smoke).
 
-    Port of noncld_obs_chk.f90. If neighboring pixels are cloudy,
-    reduce confidence of current pixel.
+    Port of noncld_obs_chk.f90. The Fortran version checks for dust/smoke
+    obstructions using IR BTD tests. It does NOT modify confidence — it
+    only clears test bit 28 if the 11-12um BTD is below the dust threshold.
 
     Args:
         confdnc: Current confidence value.
@@ -335,33 +348,12 @@ def chk_cloud_adj(
         qa_bits: 10-byte array (modified in-place).
 
     Returns:
-        Updated confidence value.
+        Updated confidence value (unchanged per Fortran behavior).
     """
-    thr = thresholds.get('cloud_adjacency', {})
-
-    # Count cloudy neighbors in 3x3 box
-    n_cloudy = 0
-    n_total = 0
-    for i in range(max(0, row - 1), min(n_rows, row + 2)):
-        for j in range(max(0, col - 1), min(n_cols, col + 2)):
-            if i == row and j == col:
-                continue
-            n_total += 1
-            if cm_array[i, j] < 2:  # cloudy or probably cloudy
-                n_cloudy += 1
-
-    if n_total == 0:
-        return confdnc
-
-    # If most neighbors are cloudy, reduce confidence
-    cloudy_frac = n_cloudy / n_total
-    adj_threshold = thr.get('cloudy_fraction', 0.75)
-
-    if cloudy_frac > adj_threshold:
-        max_conf = thr.get('max_confidence', 0.95)
-        confdnc = min(confdnc, max_conf)
-        clear_bit(testbits, BIT_CLOUD_ADJ)
-
+    # Fortran noncld_obs_chk.f90 does NOT modify confidence.
+    # It only checks for dust/smoke using IR BTD and clears bit 28.
+    # The cloud adjacency confidence cap was a Python-only addition
+    # that created a feedback loop (91% cloudy → all pixels capped at 0.95).
     return confdnc
 
 
@@ -375,7 +367,7 @@ def chk_thin_cirrus_ir(
 ) -> float:
     """Thin cirrus IR check.
 
-    Port of thin_ci_chk_ir.f90.
+    Port of thin_ci_chk_ir.f90. Only sets flag bits; does NOT modify confidence.
 
     Args:
         confdnc: Current confidence value.
@@ -386,24 +378,35 @@ def chk_thin_cirrus_ir(
         qa_bits: 10-byte array (modified in-place).
 
     Returns:
-        Updated confidence value.
+        Updated confidence value (unchanged).
     """
-    thr = thresholds.get('thin_cirrus_ir', {})
-
     masir11 = pxldat[IR_11]
     masir12 = pxldat[IR_12]
 
     if masir11 < BAD_DATA + 1.0 or masir12 < BAD_DATA + 1.0:
         return confdnc
+    if vza <= 0.0:
+        return confdnc
 
-    # 11-12um BTD for thin cirrus
-    btd = masir11 - masir12
-    cirrus_threshold = thr.get('btd_threshold', 1.0)
+    masdf1 = masir11 - masir12
+    cosvza = math.cos(vza * math.pi / 180.0)
+    schi = 1.0 / cosvza if abs(cosvza) > 1e-6 else 99.0
 
-    if btd < cirrus_threshold and confdnc > 0.95:
-        # Thin cirrus detected, reduce confidence
+    # APOLLO lookup table threshold
+    diftemp = tview(schi, masir11)
+
+    if diftemp < 0.1 or abs(schi - 99.0) < 0.0001:
+        return confdnc
+
+    ci1 = diftemp
+    ci2 = diftemp + 0.3 * diftemp
+
+    # Set QA bit indicating thin cirrus test applied
+    set_bit_qa(qa_bits, 11)
+
+    # Only flag if BTD falls in thin cirrus range
+    if masdf1 > ci1 and masdf1 <= ci2:
         clear_bit(testbits, BIT_THIN_CIRRUS_IR)
-        confdnc = min(confdnc, 0.95)
 
     return confdnc
 

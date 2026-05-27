@@ -21,6 +21,7 @@ import numpy as np
 
 from .config import FY3Config, load_config
 from .algorithm import run_cloud_mask_swath, CloudMaskResult
+from .algorithm.native_backend import is_native_available, process_swath_native, get_backend_info
 from .output import (
     compute_cloud_amount, compute_cloud_amount_with_coords,
     write_cloud_mask, write_cloud_amount, write_combined_product,
@@ -66,7 +67,9 @@ class CloudMaskPipeline:
         """
         self.config = load_config(config_path)
         self.thresholds = self._load_thresholds()
+        self._backend_info = get_backend_info()
         logger.info(f"Pipeline initialized with config: {config_path}")
+        logger.info(f"Backend: {self._backend_info['backend']}")
 
     def _load_thresholds(self) -> dict:
         """Load threshold configuration.
@@ -127,27 +130,36 @@ class CloudMaskPipeline:
 
             # Step 4: Run cloud mask algorithm
             logger.info("Step 4: Running cloud mask algorithm...")
-            cm_bitarray, cm_qa_bitarray, cm_tmp, confidence = run_cloud_mask_swath(
-                pxldat_swath=sat_data['pxldat'],
-                lat_swath=sat_data['lat'],
-                lon_swath=sat_data['lon'],
-                elevation_swath=sat_data['elevation'],
-                lsf_swath=sat_data['lsf'],
-                sza_swath=sat_data['sza'],
-                vza_swath=sat_data['vza'],
-                glint_angle_swath=sat_data['glint_angle'],
-                eco_type_swath=sat_data['eco_type'],
-                snow_mask_swath=sat_data['snow_mask'],
-                sst_swath=sat_data.get('sst', np.zeros_like(sat_data['lat'])),
-                nwp_sfctmp_swath=nwp_data.get('sfctmp', np.zeros_like(sat_data['lat'])),
-                nwp_pmsl_swath=nwp_data.get('pmsl', np.zeros_like(sat_data['lat'])),
-                nwp_u_wind_swath=nwp_data.get('u_wind', np.zeros_like(sat_data['lat'])),
-                nwp_v_wind_swath=nwp_data.get('v_wind', np.zeros_like(sat_data['lat'])),
-                nwp_precip_water_swath=nwp_data.get('precip_water', np.zeros_like(sat_data['lat'])),
-                bt_clr_swath=nwp_data.get('bt_clr', np.zeros((*sat_data['lat'].shape, 7))),
-                sensor_id=self.config.sensor.sensor_id,
-                thresholds=self.thresholds,
-            )
+            if is_native_available():
+                logger.info("  Using native C++/Fortran backend (OpenMP)")
+                cm_result = self._run_native_backend(sat_data, nwp_data)
+                cm_bitarray = cm_result['cm_bitarray']
+                cm_qa_bitarray = cm_result['qa_bitarray']
+                cm_tmp = cm_result['cloud_mask']
+                confidence = cm_result['confidence']
+            else:
+                logger.info("  Using Python/Numba backend")
+                cm_bitarray, cm_qa_bitarray, cm_tmp, confidence = run_cloud_mask_swath(
+                    pxldat_swath=sat_data['pxldat'],
+                    lat_swath=sat_data['lat'],
+                    lon_swath=sat_data['lon'],
+                    elevation_swath=sat_data['elevation'],
+                    lsf_swath=sat_data['lsf'],
+                    sza_swath=sat_data['sza'],
+                    vza_swath=sat_data['vza'],
+                    glint_angle_swath=sat_data['glint_angle'],
+                    eco_type_swath=sat_data['eco_type'],
+                    snow_mask_swath=sat_data['snow_mask'],
+                    sst_swath=sat_data.get('sst', np.zeros_like(sat_data['lat'])),
+                    nwp_sfctmp_swath=nwp_data.get('sfctmp', np.zeros_like(sat_data['lat'])),
+                    nwp_pmsl_swath=nwp_data.get('pmsl', np.zeros_like(sat_data['lat'])),
+                    nwp_u_wind_swath=nwp_data.get('u_wind', np.zeros_like(sat_data['lat'])),
+                    nwp_v_wind_swath=nwp_data.get('v_wind', np.zeros_like(sat_data['lat'])),
+                    nwp_precip_water_swath=nwp_data.get('precip_water', np.zeros_like(sat_data['lat'])),
+                    bt_clr_swath=nwp_data.get('bt_clr', np.zeros((*sat_data['lat'].shape, 7))),
+                    sensor_id=self.config.sensor.sensor_id,
+                    thresholds=self.thresholds,
+                )
 
             # Step 5: Compute cloud amount
             logger.info("Step 5: Computing cloud amount...")
@@ -199,6 +211,54 @@ class CloudMaskPipeline:
                 n_clear=0,
                 error_message=str(e),
             )
+
+    def _run_native_backend(self, sat_data: dict, nwp_data: dict) -> dict:
+        """Run cloud mask using the native C++/Fortran backend.
+
+        Args:
+            sat_data: Satellite data dictionary.
+            nwp_data: NWP data dictionary.
+
+        Returns:
+            Dictionary with cloud mask results.
+        """
+        n_elem, n_line = sat_data['lat'].shape
+
+        # Extract VIS and IR bands from pxldat
+        pxldat = sat_data['pxldat']
+        if pxldat.ndim == 3 and pxldat.shape[2] == 25:
+            ref_vis = pxldat[:, :, :19].astype(np.float32)
+            tbb_ir = pxldat[:, :, 19:25].astype(np.float32)
+        else:
+            raise ValueError(f"Unexpected pxldat shape: {pxldat.shape}")
+
+        # Prepare geometry arrays
+        lat = sat_data['lat'].astype(np.float32)
+        lon = sat_data['lon'].astype(np.float32)
+        satzen = sat_data['vza'].astype(np.float32)
+        solzen = sat_data['sza'].astype(np.float32)
+        relaz = np.zeros_like(lat, dtype=np.float32)  # Placeholder
+        glint = sat_data['glint_angle'].astype(np.float32)
+
+        # NWP arrays
+        sfctmp = nwp_data.get('sfctmp', np.full_like(lat, 300.0)).astype(np.float32)
+        pmsl = nwp_data.get('pmsl', np.full_like(lat, 1013.0)).astype(np.float32)
+        uwind = nwp_data.get('u_wind', np.zeros_like(lat)).astype(np.float32)
+        vwind = nwp_data.get('v_wind', np.zeros_like(lat)).astype(np.float32)
+        tpw = nwp_data.get('precip_water', np.full_like(lat, 3.0)).astype(np.float32)
+        btclr = nwp_data.get('bt_clr', np.full((*lat.shape, 7), 280.0, dtype=np.float32))
+
+        # Ancillary arrays
+        elev = sat_data['elevation'].astype(np.float32)
+        eco = sat_data['eco_type'].astype(np.int8)
+        snow_mask = sat_data['snow_mask'].astype(np.int8)
+
+        # Call native engine
+        return process_swath_native(
+            ref_vis, tbb_ir, lat, lon, satzen, solzen, relaz, glint,
+            sfctmp, pmsl, uwind, vwind, tpw, elev, eco, snow_mask, btclr,
+            n_elem, n_line
+        )
 
     def _read_satellite_data(self, l1b_path: str, geo_path: str) -> dict:
         """Read satellite data from HDF5 files.

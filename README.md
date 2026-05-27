@@ -3,7 +3,7 @@
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A modern Python implementation of the FYLAT FY-3D MERSI-II Cloud Mask Retrieval System (V3.2), ported from the original Fortran codebase.
+A modern Python implementation of the FYLAT FY-3D MERSI-II Cloud Mask Retrieval System (V3.1), ported from the original Fortran codebase.
 
 ## Overview
 
@@ -15,6 +15,7 @@ This system generates cloud mask products from FY-3D MERSI-II satellite data. It
 - **S-curve confidence interpolation** for cloud probability
 - **48-bit testbits** and **80-bit QA bits** cloud mask encoding
 - **4-level cloud confidence**: cloudy(0), probably cloudy(1), probably clear(2), confident clear(3)
+- **NWP integration** (GFS 0.25° data for surface temperature, pressure, precipitable water)
 
 ## Key Features
 
@@ -25,6 +26,195 @@ This system generates cloud mask products from FY-3D MERSI-II satellite data. It
 - **HDF5 output** - Standard satellite data format
 - **CLI interface** - Command-line tool for batch processing
 - **Comprehensive tests** - 34 unit tests covering all components
+
+## Implementation Architecture
+
+### Multi-Language Hybrid Design
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  Python 编排层                        │
+│  CLI (click) → Pipeline → Config → Output Writer     │
+│  负责：命令行交互 / 流程编排 / 配置管理 / HDF5 写入      │
+└──────────────┬──────────────┬───────────────────────┘
+               │              │
+     ┌─────────▼────┐  ┌──────▼──────────────┐
+     │  Numba 后端   │  │  C++/Fortran 后端    │
+     │  (纯 Python)  │  │  (原生加速 30-100x)  │
+     │              │  │                      │
+     │ @njit JIT   │  │ pybind11 绑定        │
+     │ 置信度/位操作 │  │ OpenMP 并行像素循环    │
+     │ 空间分析     │  │ Fortran 核心算法      │
+     └──────┬───────┘  └──────┬───────────────┘
+            │                 │
+            └────────┬────────┘
+                     │
+            ┌────────▼────────┐
+            │  阈值配置 (YAML)  │
+            │  790+ 物理参数    │
+            └─────────────────┘
+```
+
+代码运行时会自动检测原生后端是否可用（`native_backend.py:30-37`），优先使用 C++/Fortran + OpenMP 版本，不可用时回退到纯 Python/Numba 版本。两条路径产出的结果**数学上等价**（同一套 Fortran 算法的两种翻译）。
+
+### 核心部件详解
+
+#### 部件 1：配置系统 (`config.py` + `config/default.yaml` + 阈值 YAML)
+
+```
+config/default.yaml          → FY3Config dataclass  → 所有模块读取
+config/thresholds/*.yaml     → dict                 → 光谱检验阈值参数
+```
+
+YAML 配置文件替代原始 Fortran 的 namelist (`.nml`) 格式。`config.py:147` 的 `load_config()` 支持递归合并覆盖，CLI 参数可以覆盖配置文件中的任意字段。阈值文件 `mersi_ii3d_v8.yaml` 包含所有物理阈值参数，按地表类型/光照条件分层组织。
+
+#### 部件 2：常量定义 (`constants.py`)
+
+```
+传感器维度 / 波段映射 / 波长-波数对照 / 位布局定义 / 物理常数
+```
+
+所有"魔法数字"集中管理。将 Fortran 中散落的数值提取为命名常量，保证算法精度（如 `BAND_064=2` 代表 0.64μm 通道在 pxldat 数组中的位置）。
+
+#### 部件 3：地表分类器 (`surface_classifier.py`)
+
+```
+输入: lat, lon, elevation, lsf, sza, eco_type, snow_mask
+  ↓
+输出: PixelFlags (24个布尔标志)
+  polar / land / water / coast / desert / day / night
+  snow / ice / snglnt / hi_elev / antarctic / sh_ocean ...
+```
+
+每一个像素的"身份证"。后续光谱检验路径根据这组标志决定走哪条决策树分支。NDSI 雪检测（第 284-363 行）还包含 5 重假雪过滤（卷云/耀斑/冰云/水云/近红外亮度）。
+
+#### 部件 4：光谱检验引擎 (`algorithm/tests/` 目录)
+
+```
+18 条检验路径:
+  land_day.py      → land_day_standard / coast / desert / desert_coast
+  ocean_day.py     → ocean_day
+  land_nite.py     → land_nite
+  ocean_nite.py    → ocean_nite
+  polar_day.py     → polar_day_land / coast / desert / ocean / snow
+  polar_nite.py    → polar_nite_land / ocean / snow
+  snow_tests.py    → day_snow / nite_snow / antarctic_day
+  restoral.py      → 8 个后处理修复
+```
+
+每条路径函数签名统一为：
+```python
+def xxx(pxldat, ..., thresholds, testbits, qa_bits) -> tuple[confdnc, nmtests, nbands]
+```
+- 读入 25 通道数据 + 阈值参数
+- **原地修改** `testbits`（6 字节）和 `qa_bits`（10 字节）
+- 返回 (置信度, 检验数, 使用波段数)
+
+#### 部件 5：S 曲线置信度 (`confidence.py`)
+
+```python
+conf_test(val, locut, midpt, hicut, power) → [0.0, 1.0]
+```
+
+所有光谱检验的统一"打分函数"。4 个参数控制曲线形状：
+- `locut` — 确定有云的下界
+- `hicut` — 确定晴空的上界
+- `midpt` — 50% 置信度转折点
+- `power` — S 形弯曲程度
+
+`encode_confidence()` 将连续置信度编码为 2-bit 离散掩膜：>0.99→确定晴空, >0.95→可能晴空, >0.66→可能多云, ≤0.66→有云。
+
+#### 部件 6：位操作 (`bitops.py`)
+
+```python
+set_bit(testbits, bit_num)    # 置位
+clear_bit(testbits, bit_num)  # 清零
+check_bit(testbits, bit_num)  # 读取
+fill_bit_pixel(...)           # 质量位组装
+proc_path(...)                # 处理路径编码
+convert_cloud_mask(...)       # 48-bit → 4-level 云掩膜
+```
+
+47 个命名位（0-47）编码了每一步检验的触发状态、通过的检验、最终掩膜值。10 字节 QA 位（80-bit）存储额外质量控制信息。
+
+#### 部件 7：空间分析 (`spatial.py`)
+
+```python
+tview(vza, lat)                    # APOLLO BTD 11-12μm 阈值 (双线性查表)
+get_regional_mean(data_3x3)        # 3x3 邻域均值
+get_regional_std(data_3x3)         # 3x3 邻域标准差
+check_reg_uniformity(data_3x3)     # 均匀性判定
+```
+
+云检测不只依赖单像素信息，还利用空间上下文。
+
+#### 部件 8：云量统计 (`cloud_amount.py`)
+
+```
+5×5 像素盒 (1km×1km × 25 = 5km×5km) → 盒内 cloud_ratio → 0-100%
+```
+
+将 1km 云掩膜降分辨率到 5km 网格，统计每个 5×5 盒内的云像素占比。
+
+#### 部件 9：输出写入器 (`output/writer.py`)
+
+```python
+write_cloud_mask()       → CLM 产品 (HDF5 Group: Cloud_Mask_1km)
+write_cloud_amount()     → CLA 产品 (HDF5 Group: Cloud_Amount_5km)
+write_combined_product() → 融合产品 (单文件包含两组 Group)
+```
+
+输出符合 CF-1.8 约定的 HDF5 格式，包含全局属性（机构/数据源/处理时间）。
+
+### 数据流全景
+
+```
+┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+│ L1b HDF5     │   │ GEO HDF5     │   │ NWP GFS 二进制│
+│ 25通道 DN值   │   │ 经纬度/角度    │   │ 地表温度/气压   │
+└──────┬───────┘   └──────┬───────┘   └──────┬───────┘
+       │                  │                  │
+       ▼                  ▼                  ▼
+  DN → 物理量          角度缩放            最近邻插值
+  VIS: 反射率          sza/vza/glint       → 像素网格
+  IR: Planck逆变换
+       │                  │                  │
+       └──────────────────┼──────────────────┘
+                          │
+              ┌───────────▼───────────┐
+              │  run_cloud_mask_swath │
+              │  逐像素循环 (4M pixels) │
+              │                      │
+              │  每个像素:             │
+              │  ① 地表分类           │
+              │  ② 分派光谱检验 (4组)   │
+              │  ③ S曲线置信度         │
+              │  ④ 后处理修复 (8种)    │
+              │  ⑤ 位编码输出          │
+              └───────────┬───────────┘
+                          │
+              ┌───────────▼───────────┐
+              │   云量统计 (5km网格)    │
+              │   5×5 盒 → 0-100%    │
+              └───────────┬───────────┘
+                          │
+              ┌───────────▼───────────┐
+              │   HDF5 输出文件        │
+              │   Cloud_Mask_1km/     │
+              │   Cloud_Amount_5km/   │
+              └───────────────────────┘
+```
+
+### 核心设计决策
+
+| 设计决策 | 原因 |
+|---------|------|
+| **Fortran 算法保持原样** | 确保与业务系统 MOD35 的一致性，所有阈值参数不变 |
+| **Numba JIT 而不是纯 NumPy** | 逐像素循环有大量分支判断，无法向量化，JIT 是最佳折中 |
+| **YAML 阈值替代 namelist** | 可读性、可版本管理、支持递归覆盖 |
+| **双后端架构** | 开发/调试用纯 Python，生产用 C++/Fortran + OpenMP |
+| **48+80 bit 位编码** | 兼容 MODIS MOD35 标准格式，每个检验都可追溯 |
+| **原位修改 testbits/qa_bits** | 避免内存分配开销，与 Fortran 调用模式一致 |
 
 ## Project Structure
 
@@ -68,7 +258,8 @@ fy3_cloudmask/
 │           └── cloud_amount.py      # Cloud amount computation
 ├── tests/
 │   ├── test_cloud_mask.py           # Cloud mask integration tests
-│   └── test_algorithms.py           # Algorithm component tests
+│   ├── test_algorithms.py           # Algorithm component tests
+│   └── test_pipeline_e2e.py         # E2E test with real FY-3D data
 └── scripts/
     └── convert_thresholds.py        # Threshold file converter
 ```
@@ -178,48 +369,61 @@ write_cloud_mask('output/CLM.h5', cm_bitarray, cm_qa, cm_tmp, confidence, lon, l
 
 ## Algorithm Description
 
-### Cloud Mask Decision Tree
+### Processing Pipeline
 
 ```
-1. Classify pixel surface type
-   ├── Land / Water / Coast / Desert
-   ├── Snow / Ice
-   ├── Polar (>60° latitude)
-   └── Day / Night (SZA > 85°)
-
-2. Dispatch to appropriate test function
-   ├── Daytime Land: land_day_standard, land_day_coast, land_day_desert
-   ├── Daytime Ocean: ocean_day
-   ├── Nighttime Land: land_nite
-   ├── Nighttime Ocean: ocean_nite
-   ├── Polar variants: polar_day_*, polar_nite_*
-   └── Snow/Ice: day_snow, nite_snow, antarctic_day
-
-3. Apply spectral tests (per group)
-   Group 1: IR forward model fit (PFMFT/NFMFT)
-   Group 2: BTD tests (11-12μm, 11-4μm, 8-11μm)
-   Group 3: Visible tests (0.64μm, GEMI ratio)
-   Group 4: NIR test (1.38μm cirrus)
-
-4. Compute confidence
-   - Each test returns confidence [0, 1]
-   - Group confidence = minimum of test confidences
-   - Final confidence = geometric mean of group confidences
-
-5. Post-processing (restoral tests)
-   - Land/coast restoral
-   - Sun glint adjustment
-   - Shallow water correction
-   - Spatial variability check
-   - Cloud adjacency check
-   - Thin cirrus IR check
-   - Shadow detection
-
-6. Encode output
-   - Confidence → 2-bit encoding (cloudy/prob_cloudy/prob_clear/clear)
-   - Assemble 48-bit testbits
-   - Assemble 80-bit QA bits
-   - Compute 5km cloud amount
+Input: FY-3D MERSI-II L1b (HDF5) + GEO (HDF5) + NWP (GRIB2)
+  │
+  ├─ 1. Read L1b data (25 channels: 19 VIS + 6 IR)
+  ├─ 2. Read GEO data (lat, lon, SZA, VZA, land/sea flag)
+  ├─ 3. Read NWP data (surface temp, pressure, precip water)
+  │
+  ▼
+Per-pixel loop (2048 × 2000):
+  │
+  ├─ Step 1: DN → Physical units
+  │    VIS: reflectance = (coef0 + coef1×DN + coef2×DN²) × 0.01 / cos(SZA) / esd²
+  │    IR:  DN IS radiance (mW/m²/sr/cm⁻¹) for FY-3D
+  │         BT = c2×ν / ln(c1×ν³ / (1e-5×R) + 1)   [Planck inversion]
+  │         BT_corrected = (BT_raw - TCI) / TCS       [TCS/TCI correction]
+  │
+  ├─ Step 2: Classify surface type
+  │    Land / Water / Coast / Desert / Snow / Ice / Polar (>60°)
+  │    Day / Night (SZA > 85°)
+  │
+  ├─ Step 3: Dispatch spectral tests
+  │    ├─ Daytime Land:  land_day_standard / land_day_coast / land_day_desert
+  │    ├─ Daytime Ocean: ocean_day
+  │    ├─ Nighttime:     land_nite / ocean_nite
+  │    ├─ Polar:         polar_day_* / polar_nite_*
+  │    └─ Snow/Ice:      day_snow / nite_snow / antarctic_day
+  │
+  │    Each test has 4 groups:
+  │      Group 1: IR threshold + PFMFT/NFMFT + SST test
+  │      Group 2: BTD tests (11-12μm, 11-4μm, 8-11μm)
+  │      Group 3: Visible tests (0.64μm, 0.86μm, ratio)
+  │      Group 4: NIR test (1.38μm thin cirrus)
+  │
+  │    Confidence = geometric mean of active group minimums
+  │
+  ├─ Step 4: Restoral tests (post-processing)
+  │    1. chk_land_restoral     — restore clear if surface temp ≈ BT
+  │    2. chk_coast_restoral    — restore clear for coastal pixels
+  │    3. chk_sunglint_restoral — sun glint clear-sky restoral
+  │    4. chk_shallow_water     — shallow water correction
+  │    5. chk_spatial_var       — boost confidence for uniform scenes
+  │    6. chk_thin_cirrus_ir    — flag thin cirrus (no confidence change)
+  │    7. chk_shadow            — cloud shadow detection
+  │    8. chk_cloud_adj         — non-cloud obstruction check (dust/smoke)
+  │
+  ├─ Step 5: Encode output
+  │    confidence → 2-bit: (>0.99→3, >0.95→2, >0.66→1, ≤0.66→0)
+  │    Assemble 48-bit testbits + 80-bit QA bits
+  │
+  ▼
+Output: Cloud_Mask (48-bit), QA (80-bit), Cloud_Mask_Value (0-3), Confidence (0-1)
+  │
+  └─ Compute 5km Cloud Amount (5×5 pixel boxes → 0-100%)
 ```
 
 ### Confidence Encoding
@@ -281,25 +485,21 @@ pfmft:
 ## Testing
 
 ```bash
-# Run all tests
-PYTHONPATH=src python -m pytest tests/ -v
+# Run all unit tests
+PYTHONPATH=src python -m pytest tests/test_algorithms.py tests/test_cloud_mask.py -v
 
-# Run specific test file
-PYTHONPATH=src python -m pytest tests/test_algorithms.py -v
+# Run E2E test with real FY-3D data (~12 min)
+PYTHONPATH=src python -m pytest tests/test_pipeline_e2e.py::TestPipelineE2E::test_full_orbit_with_nwp -v
 
-# Run with coverage
-PYTHONPATH=src python -m pytest tests/ --cov=fy3_cloudmask
+# Run E2E test without NWP (uses dummy NWP)
+PYTHONPATH=src python -m pytest tests/test_pipeline_e2e.py::TestPipelineE2E::test_full_orbit -v
 ```
 
-### Test Coverage
+### Test Types
 
-- **34 unit tests** covering:
-  - Confidence functions (6 tests)
-  - Bit operations (7 tests)
-  - Spatial analysis (5 tests)
-  - Surface classification (5 tests)
-  - Cloud mask pixel processing (2 tests)
-  - Additional algorithm tests (9 tests)
+- **Unit tests** (`test_algorithms.py`): confidence functions, bit operations, spatial analysis
+- **Integration tests** (`test_cloud_mask.py`): pixel-level cloud mask processing
+- **E2E tests** (`test_pipeline_e2e.py`): full orbit with real L1b/GEO/NWP data, output verification
 
 ## Output Products
 
@@ -323,13 +523,13 @@ PYTHONPATH=src python -m pytest tests/ --cov=fy3_cloudmask
 
 ## Performance
 
-- **Single orbit processing**: ~2-5 minutes (depending on hardware)
+- **Single orbit processing**: ~12 minutes (2048×2000 pixels, with NWP interpolation)
 - **Memory usage**: ~4-8 GB for single orbit
 - **Acceleration**: Numba JIT compilation for hot loops
 
 ## Migration from Fortran
 
-This Python implementation is a complete rewrite of the original Fortran system:
+This Python implementation is a port of the original Fortran system (retrieval_system_V3.1_cldmask):
 
 | Component | Original Fortran | Python Implementation |
 |-----------|------------------|----------------------|
@@ -342,20 +542,21 @@ This Python implementation is a complete rewrite of the original Fortran system:
 
 ### What's Preserved
 
-- All cloud detection algorithms
-- All threshold values
-- Bit layout and encoding
-- Decision tree logic
-- Surface classification rules
+- All cloud detection algorithms (land_day, ocean_day, land_nite, ocean_nite, polar, snow)
+- All threshold values (from mersi_ii3d_v8.yaml)
+- Bit layout and encoding (48-bit testbits, 80-bit QA)
+- Decision tree logic and surface classification rules
+- Restoral tests (land, coast, sunglint, spatial var, thin cirrus, shadow)
+- Planck function with FY-3D TCS/TCI correction
+- APOLLO tview lookup table for thin cirrus BTD threshold
 
 ### What's Improved
 
 - Modular, maintainable code structure
-- Comprehensive unit tests
+- Comprehensive unit tests + E2E tests with real data
 - YAML configuration
 - Python ecosystem integration
 - Better error handling
-- Documentation
 
 ## Dependencies
 
@@ -397,15 +598,17 @@ For questions or issues, please open an issue on GitHub or contact the maintaine
 
 ## Changelog
 
-### V3.2.0 (2026-05-15)
+### V3.1.0 (2026-05-20)
 
 - Initial Python release
-- Complete rewrite from Fortran
+- Port from Fortran (retrieval_system_V3.1_cldmask)
 - All cloud mask algorithms implemented
-- Comprehensive test suite
+- E2E test with real FY-3D L1b/GEO/NWP data
 - YAML configuration
 - CLI interface
 - HDF5 output
+- Fixed IR Planck formula (correct c1=2hc², conversion 1e-5, FY-3D TCS/TCI)
+- Fixed restoral tests (chk_cloud_adj, chk_sunglint_restoral matched to Fortran)
 
 ---
 

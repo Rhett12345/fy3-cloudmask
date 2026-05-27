@@ -1,0 +1,655 @@
+! =============================================================================
+! cloudmask_c_api.f90
+!
+! ISO_C_BINDING wrapper for the FY-3D MERSI-II cloud mask algorithm.
+! This file exposes a single C-callable function that processes the entire
+! swath with OpenMP parallelization. It calls the existing Fortran subroutines
+! from the original retrieval_system_V3.1_cldmask codebase.
+!
+! Architecture: C++ (OpenMP pixel loop) -> this wrapper -> existing Fortran subroutines
+! =============================================================================
+
+module cloudmask_c_api_mod
+    use, intrinsic :: iso_c_binding
+    use cloudmask_data_arrays
+    use names_module,       only: fylat_sensor_id, code_root_path
+    use data_arrays_module, only: sat, geo, nwp26, nwp36
+    use constant
+    use thresholds_read_module
+    use polar_module
+    use land_module
+    use water_module
+    use fylat_fy3mersi_cloud_mask, only: snow_mask, chk_ele_lin_edge, &
+        check_reg_uniformity
+    implicit none
+
+    include 'global.inc'
+
+contains
+
+    ! =========================================================================
+    ! process_pixel_c -- C-callable per-pixel cloud mask algorithm.
+    !
+    ! This subroutine processes a single pixel given its data extracted from
+    ! the swath arrays. All state is stored in the threadprivate module
+    ! variables of cloudmask_data_arrays, making this thread-safe under OpenMP.
+    ! =========================================================================
+    subroutine process_pixel_c( &
+        ! --- Input: pixel data (25 bands) ---
+        pxldat_in,                  &
+        ! --- Input: geometry ---
+        lat_in, lon_in,             &
+        satzen_in, solzen_in,       &
+        relaz_in, glint_in,         &
+        ! --- Input: NWP ---
+        sfctmp_in, pmsl_in,         &
+        uwind_in, vwind_in,         &
+        tpw_in,                     &
+        ! --- Input: ancillary ---
+        pelev_in, eco_in,           &
+        snow_mask_in,               &
+        ! --- Input: clear-sky BT from RTM ---
+        btclr_in,                   &
+        ! --- Input: 3x3 context (3x3x25) ---
+        indat_in,                   &
+        ! --- Input: pixel indices ---
+        ielem_in, iline_in,         &
+        ! --- Output ---
+        out_testbits, out_qa_bits,  &
+        out_confidence, out_mask,   &
+        out_nmtests, out_nbands,    &
+        out_shadow_flag, out_smoke_flag &
+    ) bind(C, name='process_pixel_c')
+
+
+        ! --- Arguments ---
+        real(c_float), intent(in)    :: pxldat_in(inband)
+        real(c_float), value, intent(in) :: lat_in, lon_in
+        real(c_float), value, intent(in) :: satzen_in, solzen_in
+        real(c_float), value, intent(in) :: relaz_in, glint_in
+        real(c_float), value, intent(in) :: sfctmp_in, pmsl_in
+        real(c_float), value, intent(in) :: uwind_in, vwind_in
+        real(c_float), value, intent(in) :: tpw_in
+        real(c_float), value, intent(in) :: pelev_in
+        integer(c_signed_char), value, intent(in) :: eco_in
+        integer(c_signed_char), value, intent(in) :: snow_mask_in
+        real(c_float), intent(in)    :: btclr_in(7)
+        real(c_float), intent(in)    :: indat_in(necntx, nlcntx, inband)
+        integer(c_int), value, intent(in) :: ielem_in, iline_in
+
+        integer(c_signed_char), intent(out) :: out_testbits(6)
+        integer(c_signed_char), intent(out) :: out_qa_bits(10)
+        real(c_float), intent(out)   :: out_confidence
+        integer(c_int), intent(out)  :: out_mask
+        integer(c_int), intent(out)  :: out_nmtests, out_nbands
+        integer(c_int), intent(out)  :: out_shadow_flag, out_smoke_flag
+
+        ! --- Local variables ---
+        real(c_float) :: pxldat_local(inband)
+        real(c_float) :: tbadj_local
+        integer(c_signed_char) :: eco_type_local
+        logical :: process_local
+        integer(c_signed_char) :: is_cold_sfc
+        real(c_float) :: btclr_local(7)
+        real(c_float) :: indat_local(necntx, nlcntx, inband)
+        integer :: i_sta, i_end, j_sta, j_end
+
+        ! Copy input data to local arrays
+        pxldat_local = pxldat_in
+        btclr_local  = btclr_in
+        indat_local  = indat_in
+        eco_type_local = eco_in
+
+        ! Initialize pixel state (uses threadprivate module variables)
+        call pxinit(testbits, qa_bits, precip_water, vza, sfctmp, pmsl, &
+                     u_wind, v_wind, plat, plon, lsf,                   &
+                     polar, day, night, land, water, coast, snglnt,      &
+                     visusd, vrused, snow, ice, desert, bad_value,       &
+                     bad_geo, uniform, shadow, smoke, cirrus_ir,         &
+                     cirrus_vis, nmtests, nbands, nbad_1km, nbad_250,    &
+                     hi_elev, antarctic, sh_ocean, sg_bad_data,          &
+                     map_ice, map_snow, sh_lake)
+
+        ! Set pixel geometry and ancillary data
+        plat = lat_in
+        plon = lon_in
+        vza  = satzen_in
+        refang = relaz_in  ! relative azimuth angle
+        sfctmp = sfctmp_in
+        pmsl   = pmsl_in
+        u_wind = uwind_in
+        v_wind = vwind_in
+        precip_water = tpw_in
+
+        ! Set LSF from ecosystem type (simplified heuristic)
+        ! In the original code, LSF comes from ancillary data.
+        ! Here we derive a reasonable default from ecosystem type.
+        lsf = 1  ! default: land
+        if (eco_in == 0) lsf = 0  ! water
+        if (eco_in == 14) lsf = 2  ! coast
+
+        ! Compute processing flags from input data
+        call compute_pixel_flags(pxldat_local, pelev_in, eco_in, &
+                                  satzen_in, solzen_in, relaz_in,        &
+                                  glint_in, snow_mask_in, tbadj_local)
+
+        ! Check edge pixels
+        call chk_ele_lin_edge(ielem_in, iline_in, line_edge, ele_edge)
+
+        ! Check regional uniformity
+        call check_reg_uniformity(ielem_in, iline_in, line_edge, ele_edge, &
+                                   eco_type_local, day, land, water, coast, &
+                                   snow, ice, uniform)
+
+        ! Skip processing if bad data in sunglint over water
+        process_local = .true.
+        if (sg_bad_data .and. water .and. snglnt) process_local = .false.
+
+        ! Cold surface flag
+        is_cold_sfc = 0
+        if (sfctmp < 265.0) is_cold_sfc = 1
+
+        ! === Main decision tree ===
+        if (process_local) then
+            if (polar .and. day) then
+                call polar_day(pxldat_local, vza, snglnt, visusd, refang, &
+                    vrused, cirrus_vis, land, ice, snow, desert, coast,    &
+                    eco_type_local, uniform, hi_elev, ielem_in, indat_local, &
+                    nmtests, testbits, tbadj_local, antarctic, sh_ocean,   &
+                    sfctmp, qa_bits, confdnc, btclr_local, is_cold_sfc)
+            else if (polar .and. night) then
+                call polar_nite(pxldat_local, vza, land, ice, snow,       &
+                    desert, hi_elev, sfctmp, eco_type_local, nmtests, testbits, &
+                    uniform, indat_local, ielem_in, antarctic, sh_ocean,   &
+                    qa_bits, confdnc, btclr_local, is_cold_sfc)
+            else if (land .and. day) then
+                call land_day(pxldat_local, vza, visusd, vrused,           &
+                    cirrus_vis, desert, coast, snow, ice, hi_elev,         &
+                    tbadj_local, eco_type_local, testbits, qa_bits, nmtests, &
+                    confdnc, btclr_local, is_cold_sfc)
+            else if (land .and. night) then
+                call land_nite(pxldat_local, plat, vza, ice, snow, coast,  &
+                    tbadj_local, desert, hi_elev, sh_lake, sfctmp,         &
+                    eco_type_local, nmtests, testbits, qa_bits, confdnc,   &
+                    precip_water, btclr_local, is_cold_sfc)
+            else if (water .and. day) then
+                call water_day(pxldat_local, vza, snglnt, visusd, refang,  &
+                    cirrus_vis, sfctmp, hi_elev, uniform, ice, snow,       &
+                    ielem_in, iline_in, line_edge, sh_ocean, indat_local,  &
+                    nmtests, testbits, qa_bits, confdnc, btclr_local)
+            else if (water .and. night) then
+                call water_nite(pxldat_local, vza, uniform, ice, snow,     &
+                    indat_local, sfctmp, sh_ocean, ielem_in, nmtests,      &
+                    testbits, qa_bits, confdnc, btclr_local)
+            end if
+
+            ! === Post-processing restoral tests ===
+            ! Shadow detection
+            if (.not. water .and. .not. coast .and. day .and. &
+                .not. polar .and. confdnc >= 0.66) then
+                call shadows(pxldat_local, shadow, visusd, qa_bits)
+            end if
+
+            ! Non-cloud obstruction (smoke/dust)
+            if (land .and. day .and. .not. snow) then
+                call noncld_obs_chk(indat_local, pxldat_local, confdnc,    &
+                    ielem_in, line_edge, iline_in, qa_bits, testbits, smoke)
+            end if
+
+            ! Thin cirrus IR check
+            if (.not. snow .and. .not. ice) then
+                call thin_ci_chk_ir(pxldat_local, vza, cirrus_ir,          &
+                    qa_bits, testbits)
+            end if
+
+            ! Set processing path bits
+            call proc_path(water, land, day, ice, snow, snglnt, coast,     &
+                desert, smoke, shadow, testbits)
+
+            ! Set unused bits and confidence
+            call set_unused_bits(testbits)
+            call set_confdnc(confdnc, testbits)
+            call set_quality_A(nmtests, nbands, lsf, qa_bits)
+
+            ! Fill output bit arrays
+            call fill_bit_pixel(nmtests, nbands, bad_value, bad_geo,       &
+                snglnt, desert, testbits, qa_bits,                         &
+                testbits, qa_bits)  ! reuse arrays for output
+        end if
+
+        ! === Convert cloud mask to integer value ===
+        out_mask = convert_cloud_mask_value(testbits)
+
+        ! === Copy results to output arguments ===
+        out_testbits   = testbits
+        out_qa_bits    = qa_bits
+        out_confidence = confdnc
+        out_nmtests    = nmtests
+        out_nbands     = nbands
+        out_shadow_flag = merge(1, 0, shadow)
+        out_smoke_flag  = merge(1, 0, smoke)
+
+    end subroutine process_pixel_c
+
+
+    ! =========================================================================
+    ! process_swath_c -- C-callable swath-level processing with OpenMP.
+    !
+    ! Processes all pixels in a 2048x2000 swath. This is the main entry point
+    ! called from C++. Each pixel is independent and can be processed in parallel.
+    ! =========================================================================
+    subroutine process_swath_c( &
+        ! --- Input arrays (nElem x nLine x ...) ---
+        ref_vis, tbb_ir,           &  ! L1b: reflectance + BT
+        lat_arr, lon_arr,          &  ! GEO
+        satzen_arr, solzen_arr,    &  ! GEO angles
+        relaz_arr, glint_arr,      &  ! GEO angles
+        sfctmp_arr, pmsl_arr,      &  ! NWP surface
+        uwind_arr, vwind_arr,      &  ! NWP wind
+        tpw_arr,                   &  ! NWP TPW
+        elev_arr, eco_arr,         &  ! Ancillary
+        snow_mask_arr,             &  ! Snow/ice mask
+        btclr_arr,                 &  ! Clear-sky BT from RTM (nElem x nLine x 7)
+        ! --- Dimensions ---
+        nElem, nLine,              &
+        ! --- Output arrays (nElem x nLine x ...) ---
+        out_cm_bitarray,           &  ! 6-byte cloud mask
+        out_qa_bitarray,           &  ! 10-byte QA
+        out_cloud_mask,            &  ! Integer cloud mask (0-3)
+        out_confidence,            &  ! Confidence (0-1)
+        out_nmtests_arr,           &
+        out_nbands_arr,            &
+        out_shadow_arr,            &
+        out_smoke_arr              &
+    ) bind(C, name='process_swath_c')
+
+        ! --- Arguments ---
+        integer(c_int), value, intent(in) :: nElem, nLine
+        real(c_float), intent(in)     :: ref_vis(nElem, nLine, 19)
+        real(c_float), intent(in)     :: tbb_ir(nElem, nLine, 6)
+        real(c_float), intent(in)     :: lat_arr(nElem, nLine)
+        real(c_float), intent(in)     :: lon_arr(nElem, nLine)
+        real(c_float), intent(in)     :: satzen_arr(nElem, nLine)
+        real(c_float), intent(in)     :: solzen_arr(nElem, nLine)
+        real(c_float), intent(in)     :: relaz_arr(nElem, nLine)
+        real(c_float), intent(in)     :: glint_arr(nElem, nLine)
+        real(c_float), intent(in)     :: sfctmp_arr(nElem, nLine)
+        real(c_float), intent(in)     :: pmsl_arr(nElem, nLine)
+        real(c_float), intent(in)     :: uwind_arr(nElem, nLine)
+        real(c_float), intent(in)     :: vwind_arr(nElem, nLine)
+        real(c_float), intent(in)     :: tpw_arr(nElem, nLine)
+        real(c_float), intent(in)     :: elev_arr(nElem, nLine)
+        integer(c_signed_char), intent(in) :: eco_arr(nElem, nLine)
+        integer(c_signed_char), intent(in) :: snow_mask_arr(nElem, nLine)
+        real(c_float), intent(in)     :: btclr_arr(nElem, nLine, 7)
+
+        integer(c_signed_char), intent(out) :: out_cm_bitarray(nElem, nLine, 6)
+        integer(c_signed_char), intent(out) :: out_qa_bitarray(nElem, nLine, 10)
+        integer(c_int), intent(out)   :: out_cloud_mask(nElem, nLine)
+        real(c_float), intent(out)    :: out_confidence(nElem, nLine)
+        integer(c_int), intent(out)   :: out_nmtests_arr(nElem, nLine)
+        integer(c_int), intent(out)   :: out_nbands_arr(nElem, nLine)
+        integer(c_int), intent(out)   :: out_shadow_arr(nElem, nLine)
+        integer(c_int), intent(out)   :: out_smoke_arr(nElem, nLine)
+
+        ! --- Local variables ---
+        integer :: iline, ielem
+        real(c_float) :: pxldat_local(inband)
+        real(c_float) :: btclr_local(7)
+        real(c_float) :: indat_local(necntx, nlcntx, inband)
+        real(c_float) :: tbadj_local
+        integer(c_signed_char) :: eco_type_local
+        logical :: process_local
+        integer(c_signed_char) :: is_cold_sfc
+        integer :: i_sta, i_end, j_sta, j_end, ii, jj, k
+        integer(c_signed_char) :: out_tb(6), out_qa(10)
+        real(c_float) :: out_conf
+        integer(c_int) :: out_mask, out_nm, out_nb, out_sh, out_sm
+
+        ! Set sensor ID (default: FY-3D = 21)
+        ! This should be passed from Python, but we use a default for now
+        if (fylat_sensor_id == 0) fylat_sensor_id = 21
+
+        write(*,*) 'DBG: process_swath_c entered, nElem=', nElem, ' nLine=', nLine
+        flush(6)
+
+        ! Set code root path for threshold file lookup
+        ! The threshold file is at: {code_root_path}/coeff/fylat_thresholds.mersi.ii3d.v8
+        if (len_trim(code_root_path) == 0) then
+            call get_environment_variable('FY3_CODE_ROOT', code_root_path)
+            if (len_trim(code_root_path) == 0) then
+                code_root_path = '../retrieval_system_V3.1_cldmask/'
+            end if
+        end if
+
+        write(*,*) 'DBG: code_root_path=', trim(code_root_path)
+        flush(6)
+
+        ! Load thresholds (must be done before parallel region)
+        write(*,*) 'DBG: calling thresholds_read...'
+        flush(6)
+        call thresholds_read(fylat_sensor_id)
+        write(*,*) 'DBG: thresholds_read done'
+        flush(6)
+
+        ! Set sat structure dimensions (needed by chk_ele_lin_edge, check_reg_uniformity)
+        sat%nElem = nElem
+        sat%nLine = nLine
+
+        ! Allocate sat pointer arrays used by check_reg_uniformity
+        write(*,*) 'DBG: allocating sat arrays...'
+        flush(6)
+        if (associated(sat%eco)) deallocate(sat%eco)
+        if (associated(sat%snow_mask)) deallocate(sat%snow_mask)
+        allocate(sat%eco(nElem, nLine))
+        allocate(sat%snow_mask(nElem, nLine))
+        sat%eco = eco_arr
+        sat%snow_mask = snow_mask_arr
+        write(*,*) 'DBG: sat arrays allocated'
+        flush(6)
+
+        ! Allocate geo%lsm used by check_reg_uniformity
+        if (associated(geo%lsm)) deallocate(geo%lsm)
+        allocate(geo%lsm(nElem, nLine))
+        ! Derive land-sea mask from eco type (simplified mapping)
+        do iline = 1, nLine
+            do ielem = 1, nElem
+                select case (int(eco_arr(ielem, iline)))
+                    case (0)
+                        geo%lsm(ielem, iline) = 0  ! water
+                    case (14)
+                        geo%lsm(ielem, iline) = 2  ! coast
+                    case default
+                        geo%lsm(ielem, iline) = 1  ! land
+                end select
+            end do
+        end do
+
+        ! Initialize output arrays
+        out_cm_bitarray  = 0
+        out_qa_bitarray  = 0
+        out_cloud_mask   = 5  ! fill value
+        out_confidence   = 0.0
+        out_nmtests_arr  = 0
+        out_nbands_arr   = 0
+        out_shadow_arr   = 0
+        out_smoke_arr    = 0
+
+        write(*,*) 'DBG: entering parallel loop...'
+        flush(6)
+
+        ! === Main pixel loop with OpenMP parallelization ===
+        !$omp parallel do schedule(dynamic, 8) &
+        !$omp   private(iline, ielem, pxldat_local, btclr_local, indat_local, &
+        !$omp            tbadj_local, eco_type_local, process_local,          &
+        !$omp            is_cold_sfc, i_sta, i_end, j_sta, j_end, ii, jj, k, &
+        !$omp            out_tb, out_qa, out_conf, out_mask, out_nm, out_nb,  &
+        !$omp            out_sh, out_sm) &
+        !$omp   shared(ref_vis, tbb_ir, lat_arr, lon_arr, satzen_arr,        &
+        !$omp          solzen_arr, relaz_arr, glint_arr, sfctmp_arr,          &
+        !$omp          pmsl_arr, uwind_arr, vwind_arr, tpw_arr, elev_arr,    &
+        !$omp          eco_arr, snow_mask_arr, btclr_arr,                     &
+        !$omp          out_cm_bitarray, out_qa_bitarray, out_cloud_mask,      &
+        !$omp          out_confidence, out_nmtests_arr, out_nbands_arr,       &
+        !$omp          out_shadow_arr, out_smoke_arr, nElem, nLine)
+
+        do iline = 1, nLine
+            do ielem = 1, nElem
+
+                ! --- Extract 25-band pixel data ---
+                pxldat_local(1:19) = ref_vis(ielem, iline, 1:19)
+                pxldat_local(20:25) = tbb_ir(ielem, iline, 1:6)
+
+                ! FY-3D band 5/19 swap
+                if (fylat_sensor_id > 20) then
+                    pxldat_local(5) = ref_vis(ielem, iline, 19)
+                    pxldat_local(19) = ref_vis(ielem, iline, 5)
+                end if
+
+                ! Range check VIS channels
+                do k = 1, 19
+                    if (pxldat_local(k) <= -99.0 .or. pxldat_local(k) > 2.3) &
+                        pxldat_local(k) = bad_data
+                end do
+
+                ! Range check IR channels
+                do k = 20, 25
+                    if (pxldat_local(k) <= 0.0 .or. pxldat_local(k) >= 1000.0) &
+                        pxldat_local(k) = bad_data
+                end do
+
+                ! --- Clear-sky BT ---
+                btclr_local(1:7) = btclr_arr(ielem, iline, 1:7)
+
+                ! --- Extract 3x3 context ---
+                i_sta = max(1, ielem - 1)
+                i_end = min(nElem, ielem + 1)
+                j_sta = max(1, iline - 1)
+                j_end = min(nLine, iline + 1)
+
+                indat_local = bad_data
+                do jj = j_sta, j_end
+                    do ii = i_sta, i_end
+                        do k = 1, 19
+                            indat_local(ii - ielem + 2, jj - iline + 2, k) = &
+                                ref_vis(ii, jj, k)
+                        end do
+                        do k = 20, 25
+                            indat_local(ii - ielem + 2, jj - iline + 2, k) = &
+                                tbb_ir(ii, jj, k - 19)
+                        end do
+                    end do
+                end do
+
+                ! --- Process this pixel ---
+                call process_pixel_c( &
+                    pxldat_local,               &
+                    lat_arr(ielem, iline),      &
+                    lon_arr(ielem, iline),      &
+                    satzen_arr(ielem, iline),   &
+                    solzen_arr(ielem, iline),   &
+                    relaz_arr(ielem, iline),    &
+                    glint_arr(ielem, iline),    &
+                    sfctmp_arr(ielem, iline),   &
+                    pmsl_arr(ielem, iline),     &
+                    uwind_arr(ielem, iline),    &
+                    vwind_arr(ielem, iline),    &
+                    tpw_arr(ielem, iline),      &
+                    elev_arr(ielem, iline),     &
+                    eco_arr(ielem, iline),      &
+                    snow_mask_arr(ielem, iline), &
+                    btclr_local,                &
+                    indat_local,                &
+                    ielem, iline,               &
+                    out_tb, out_qa,             &
+                    out_conf, out_mask,         &
+                    out_nm, out_nb, out_sh, out_sm)
+
+                ! --- Store results ---
+                out_cm_bitarray(ielem, iline, 1:6)  = out_tb(1:6)
+                out_qa_bitarray(ielem, iline, 1:10) = out_qa(1:10)
+                out_cloud_mask(ielem, iline)  = out_mask
+                out_confidence(ielem, iline)  = out_conf
+                out_nmtests_arr(ielem, iline) = out_nm
+                out_nbands_arr(ielem, iline)  = out_nb
+                out_shadow_arr(ielem, iline)  = out_sh
+                out_smoke_arr(ielem, iline)   = out_sm
+
+            end do
+        end do
+        !$omp end parallel do
+
+    end subroutine process_swath_c
+
+
+    ! =========================================================================
+    ! Helper: compute_pixel_flags -- set surface type flags from input data
+    ! =========================================================================
+    subroutine compute_pixel_flags(pxldat0, pelev, eco_type_in, &
+                                    satzen, solzen, rela, glint, &
+                                    snow_mask_val, tbadj)
+        real(c_float), intent(in)       :: pxldat0(inband)
+        real(c_float), intent(in)       :: pelev
+        integer(c_signed_char), intent(in) :: eco_type_in
+        real(c_float), intent(in)       :: satzen, solzen, rela, glint
+        integer(c_signed_char), intent(in) :: snow_mask_val
+        real(c_float), intent(out)      :: tbadj
+
+        include 'snow_mask.inc'
+
+        real :: ndvi_val, ndsi_val
+        integer :: sg_band(5)
+        logical :: ndsi_snow_local
+        integer :: eco_int
+
+        ! Ecosystem type
+        eco_int = int(eco_type_in)
+
+        ! Threshold adjustment for elevation
+        tbadj = (pelev / 1000.0) * 5.0
+
+        ! Antarctic flag
+        antarctic = (plat < -60.0)
+
+        ! Desert determination (simplified from get_pxldat)
+        desert = .false.
+        if (eco_int >= 7 .and. eco_int <= 10) desert = .true.
+        if (eco_int == 16) desert = .true.
+
+        ! Visible ratio test disable for certain ecosystems
+        vrused = .true.
+        select case (eco_int)
+            case (2, 8, 11, 40, 41, 46, 50, 51, 52, 59, 71)
+                vrused = .false.
+        end select
+
+        ! Day/night
+        if (solzen < 0.0) then
+            bad_geo = .true.
+            day = .false.
+            night = .false.
+        else if (solzen > 85.0) then
+            night = .true.
+            day = .false.
+        else
+            day = .true.
+            night = .false.
+        end if
+
+        ! Polar
+        polar = (abs(plat) > 60.0)
+
+        ! Visible data usable
+        visusd = .not. night
+
+        ! Sunglint
+        snglnt = (glint <= 36.0)
+
+        ! Land/water from land-sea flag
+        ! (Assumes lsf is already set from ancillary data)
+        ! Default: if lsf not set externally, use simple heuristic
+        if (lsf == 1 .or. lsf == 4) then
+            land = .true.
+            water = .false.
+            coast = .false.
+        else if (lsf == 2) then
+            coast = .true.
+            land = .true.
+            water = .false.
+        else if (lsf == 3) then
+            land = .true.
+            water = .false.
+            coast = .false.
+            sh_lake = .true.
+        else
+            water = .true.
+            land = .false.
+            coast = .false.
+            sh_ocean = .true.
+        end if
+
+        ! High elevation
+        hi_elev = (pelev > 2000.0)
+        if (plat > 60.0 .and. pelev > 500.0) then
+            if ((plon > -80.0 .and. plon < -20.0) .or. &
+                (plon > 20.0 .and. plon < 180.0)) then
+                hi_elev = .true.
+                Greenland = .true.
+            end if
+        end if
+
+        ! Snow/ice from ancillary map
+        map_snow = .false.
+        map_ice  = .false.
+        select case (int(snow_mask_val))
+            case (1, 3)
+                map_snow = .true.
+            case (2, 4)
+                map_ice = .true.
+            case (5)
+                map_snow = .true.
+                map_ice = .true.
+        end select
+
+        ! Daytime snow detection via NDSI
+        if (day .and. land .and. .not. snglnt .and. .not. water) then
+            call snow_mask(pxldat0, plat, land, snglnt, water, hi_elev, &
+                            Greenland, ndsi_snow_local)
+            ndsi_snow = ndsi_snow_local
+
+            if (ndsi_snow .and. .not. map_ice) then
+                snow = .true.
+            else if (ndsi_snow .and. map_ice) then
+                ice = .true.
+            else if (map_snow) then
+                snow = .true.
+            else if (map_ice) then
+                ice = .true.
+            end if
+        else
+            ! Night: use ancillary map only
+            ice  = map_ice
+            snow = map_snow
+        end if
+
+        ! Sun-glint band check
+        sg_band = (/3, 4, 20, 24, 25/)
+        sg_bad_data = .false.
+        if (snglnt .and. water) then
+            if (any(pxldat0(sg_band) == bad_data)) sg_bad_data = .true.
+        end if
+
+    end subroutine compute_pixel_flags
+
+
+    ! =========================================================================
+    ! Helper: convert_cloud_mask_value -- extract 2-bit cloud mask from testbits
+    ! =========================================================================
+    function convert_cloud_mask_value(tb) result(cm_val)
+        integer(c_signed_char), intent(in) :: tb(6)
+        integer(c_int) :: cm_val
+
+        integer :: b0, b1, b2
+        integer :: byte_idx, bit_offset
+
+        ! Extract bits 0, 1, 2 from the first byte
+        ! Bit 0: quality flag (processed or not)
+        ! Bit 1: confidence LSB
+        ! Bit 2: confidence MSB
+        b0 = 0; b1 = 0; b2 = 0
+
+        if (btest(tb(1), 0)) b0 = 1
+        if (btest(tb(1), 1)) b1 = 1
+        if (btest(tb(1), 2)) b2 = 1
+
+        if (b0 == 0) then
+            cm_val = 0  ! Not processed -> cloudy
+        else
+            if (b2 == 0 .and. b1 == 0) cm_val = 0  ! Cloudy
+            if (b2 == 0 .and. b1 == 1) cm_val = 1  ! Probably cloudy
+            if (b2 == 1 .and. b1 == 0) cm_val = 2  ! Probably clear
+            if (b2 == 1 .and. b1 == 1) cm_val = 3  ! Confident clear
+        end if
+    end function convert_cloud_mask_value
+
+end module cloudmask_c_api_mod

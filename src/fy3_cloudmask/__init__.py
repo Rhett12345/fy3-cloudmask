@@ -3,6 +3,7 @@
 __version__ = "3.2.0"
 
 from .algorithm import run_cloud_mask_pixel, run_cloud_mask_swath, CloudMaskResult
+from .algorithm.native_backend import is_native_available, get_backend_info
 from .config import load_config, FY3Config
 from .output import (
     write_cloud_mask, write_cloud_amount, write_combined_product,
@@ -14,6 +15,9 @@ __all__ = [
     'run_cloud_mask_pixel',
     'run_cloud_mask_swath',
     'CloudMaskResult',
+    # Native backend
+    'is_native_available',
+    'get_backend_info',
     # Config
     'load_config',
     'FY3Config',

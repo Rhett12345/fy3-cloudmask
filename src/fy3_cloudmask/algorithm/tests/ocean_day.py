@@ -184,8 +184,9 @@ def ocean_day(
         schi = 1.0 / cosvza if abs(cosvza) > 1e-6 else 99.0
 
         diftemp = tview(schi, masir11)
-        do11_12hi = thr.get('btd_11_12', [3.0])
-        dfthrsh = do11_12hi[0] if (diftemp < 0.1 or abs(schi - 99.0) < 0.0001) else diftemp
+        do11_12hi = thr.get('btd_11_12', 3.0)
+        base_thr = do11_12hi[0] if isinstance(do11_12hi, list) else do11_12hi
+        dfthrsh = base_thr if (diftemp < 0.1 or abs(schi - 99.0) < 0.0001) else diftemp
 
         nmtests += 1
         nbands = max(nbands, 2)

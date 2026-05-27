@@ -81,8 +81,10 @@ MISSING_INT = -99
 # Valid data ranges
 VIS_VALID_MIN = -99.0
 VIS_VALID_MAX = 2.3
-IR_VALID_MIN = 0.0
-IR_VALID_MAX = 1000.0
+# IR_VALID_MIN = 0.0
+# IR_VALID_MAX = 1000.0
+IR_VALID_MIN = 150.5   # clip下限是150K，真实大气BT不可能达到150K
+IR_VALID_MAX = 340.0   # 地球表面最高温度约330K，留少量余量
 
 # ---------------------------------------------------------------------------
 # Geometric / physical thresholds

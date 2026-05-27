@@ -1,0 +1,2 @@
+[console_scripts]
+fy3-cloudmask = fy3_cloudmask.cli:main
