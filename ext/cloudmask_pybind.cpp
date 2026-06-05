@@ -86,7 +86,8 @@ py::dict process_swath_py(
     py::array_t<int8_t, py::array::c_style | py::array::forcecast> eco,
     py::array_t<int8_t, py::array::c_style | py::array::forcecast> snow_mask,
     py::array_t<float, py::array::c_style | py::array::forcecast> btclr,
-    int nElem, int nLine
+    int nElem, int nLine,
+    std::string code_root_path
 ) {
     // Validate input shapes
     auto rv_buf = ref_vis.request();
@@ -100,6 +101,9 @@ py::dict process_swath_py(
     auto bt_buf = btclr.request();
     if (bt_buf.ndim != 3 || bt_buf.shape[0] != nElem || bt_buf.shape[1] != nLine || bt_buf.shape[2] != 7)
         throw std::runtime_error("btclr must be (nElem, nLine, 7)");
+
+    // --- Set code root path for threshold file lookup ---
+    set_code_root_path_c(code_root_path.c_str(), static_cast<int>(code_root_path.size()));
 
     // --- Transpose inputs: C-order -> Fortran column-major order ---
     auto ref_vis_f = transpose_3d<float>(ref_vis, nElem, nLine, 19);
@@ -210,6 +214,7 @@ PYBIND11_MODULE(_cloudmask_native, m) {
         py::arg("btclr"),
         py::arg("nElem"),
         py::arg("nLine"),
+        py::arg("code_root_path") = "",
         R"doc(
             Process a full swath through the cloud mask algorithm.
 

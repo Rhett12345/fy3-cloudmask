@@ -51,6 +51,8 @@ GCC="${CONDA_PREFIX}/bin/x86_64-conda-linux-gnu-gcc"
 
 [ ! -x "$GXX" ] && GXX="${CONDA_PREFIX}/bin/g++"
 [ ! -x "$GCC" ] && GCC="${CONDA_PREFIX}/bin/gcc"
+[ ! -x "$GXX" ] && GXX="$(which g++)"
+[ ! -x "$GCC" ] && GCC="$(which gcc)"
 
 for cmd in "$GFORTRAN" "$GXX" "$GCC"; do
     if [ ! -x "$cmd" ]; then

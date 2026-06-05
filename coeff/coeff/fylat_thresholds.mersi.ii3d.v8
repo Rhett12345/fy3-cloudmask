@@ -1,0 +1,258 @@
+! FY-3D MERSI-II Cloud Mask Thresholds
+! Version: v8
+! Sensor: FY-3D MERSI-II (sensor_id=21)
+!
+thresholds_file_ver : v8
+!
+! Daytime coastal desert thresholds
+lds11_12hi_c : 3.5, 3, 2.5, 1
+lds11_4hi_c : 2, 0, -2, 1
+lds11_4lo_c : -20, -18, -16, 1
+ldsco2_c : 222, 224, 226, 1
+ldsh20_c : 215, 220, 225, 1
+ldsref2_c : 0.34, 0.3, 0.26, 1
+ldsref3_c : 0.04, 0.035, 0.03, 1
+ldstci_c : 0.035, 0.0125
+!
+! Daytime polar coastal desert thresholds
+!
+! Daytime desert thresholds
+lds11_12hi : 3.5, 3, 2.5, 1
+lds11_4hi : -3, -5, -7, 1
+lds11_4lo : -25, -23, -21, 1
+ldsco2 : 222, 224, 226, 1
+ldsh20 : 215, 220, 225, 1
+ldsref2 : 0.42, 0.39, 0.36, 1
+ldsref3 : 0.04, 0.035, 0.03, 1
+ldstci : 0.035, 0.0125
+!
+! Daytime polar desert thresholds
+!
+! Daytime land thresholds
+dl11_12hi : 3
+dl11_4lo : -14, -12, -10, 1
+dlco2 : 222, 224, 226, 1
+dlh20 : 215, 220, 225, 1
+dlref1 : 0.24, 0.2, 0.16, 1
+dlref3 : 0.04, 0.035, 0.03, 1
+dlvrat : 1.8, 1.85, 1.9, 1
+dltci : 0.035, 0.0125
+!
+! Daytime polar land thresholds
+pdl11_12hi : 3
+pdl11_4lo : -14, -12, -10, 1
+pdlh20 : 215, 220, 225, 1
+pdlref1 : 0.22, 0.18, 0.14, 1
+pdlref3 : 0.04, 0.035, 0.03, 1
+pdlvrat : 1.8, 1.85, 1.9, 1
+pdltci : 0.035, 0.0125
+!
+! Daytime coastal land thresholds
+dl11_12hi_t2 : 3
+dl11_4lo_t2 : -14, -12, -10, 1
+dlco2_t2 : 222, 224, 226, 1
+dlh20_t2 : 215, 220, 225, 1
+dlref1_t2 : 0.22, 0.18, 0.14, 1
+dlref3_t2 : 0.04, 0.035, 0.03, 1
+dltci_t2 : 0.035, 0.0125
+!
+! Daytime polar coastal land thresholds
+pdl11_12hi_t2 : 3
+pdl11_4lo_t2 : -14, -12, -10, 1
+pdlh20_t2 : 215, 220, 225, 1
+pdlref1_t2 : 0.22, 0.18, 0.14, 1
+pdlref3_t2 : 0.04, 0.035, 0.03, 1
+pdltci_t2 : 0.035, 0.0125
+!
+! Nighttime land thresholds
+nl4_12hi : 15, 10, 5, 1
+nl4_12lo : -2, -1.5, -1, 1
+nlco2 : 222, 224, 226, 1
+nlh20 : 215, 220, 225, 1
+nl7_11s : -8, -10, -11, 1
+nl_11_4l : -2, -2.5, -3, 1
+nl_11_4h : 5, 4.5, 4, 1
+nl_11_4m : -2.5, 4.5, 0.25, 1
+bt_diff_bounds : 1, -1
+nl11_12hi : 3
+!
+! Nighttime polar land thresholds
+pnlh20 : 215, 220, 225, 1
+pnl11_12hi : 3
+!
+! Daytime polar snow thresholds
+dpsh20 : 215, 220, 225, 1
+dpsref1 : 0.22, 0.2, 0.18, 1
+dpsref3 : 0.06, 0.0525, 0.045, 1
+dps4_11l : 17.5, 14.5, 11.5, 1
+dps4_11h : 10, 7, 4, 1
+dps4_11m1 : 14.5, 7, 3, 1
+dps4_11m2 : 0, 0, 0, 0
+dps4_11m3 : 0, 0, 0, 0
+bt_11_bnds3 : 230, 0, 0, 245
+dpstci : 0.035, 0.03
+dps11_12hi : 3
+dps11_12adj : 0.4
+!
+! Antarctic day thresholds
+ant4_11l : 17.5, 14.5, 11.5, 1
+ant4_11h : 10, 7, 4, 1
+ant4_11m1 : 14.5, 7, 3, 1
+ant4_11m2 : 0, 0, 0, 0
+ant4_11m3 : 0, 0, 0, 0
+bt_11_bnds4 : 230, 0, 0, 245
+anth20 : 215, 220, 225, 1
+!
+! Daytime snow thresholds
+ds4_11 : 10, 7, 4, 1
+ds4_11hel : 14, 10, 6, 1
+dsco2 : 222, 224, 226, 1
+dsh20 : 215, 220, 225, 1
+dsref3 : 0.06, 0.0525, 0.045, 1
+dstci : 0.035, 0.03
+ds11_12hi : 3
+ds11_12adj : 0.4
+!
+! Nighttime polar snow thresholds
+pn_4_12l : 4.5, 4, 3.5, 1
+pn_4_12h : 2.5, 2, 1.5, 1
+pn_4_12m1 : 4, 2, 0.5, 1
+pn_4_12m2 : 0, 0, 0, 0
+pn_4_12m3 : 0, 0, 0, 0
+pn_7_11l : -1, 0, 1, 1
+pn_7_11h : -21, -20, -19, 1
+pn_7_11m1 : 0, -4.5, -1, 1
+pn_7_11m2 : -4.5, -10.5, -1, 1
+pn_7_11m3 : -10.5, -20, -1, 1
+pn_7_11lw : 0, 1, 2, 1
+pn_7_11hw : -21, -20, -19, 1
+pn_7_11m1w : 1, -7, -1, 1
+pn_7_11m2w : -7, -16.5, -1, 1
+pn_7_11m3w : -16.5, -20, -1, 1
+pnsh20 : 215, 220, 225, 1
+pn_11_4l : -0.1, -0.2, -0.3, 1
+pn_11_4h : 1.1, 1, 0.9, 1
+pn_11_4m1 : -0.2, 1, 0.1, 1
+pn_11_4m2 : 0, 0, 0, 0
+pn_11_4m3 : 0, 0, 0, 0
+bt_11_bounds : 235, 0, 0, 265
+bt_11_bnds2 : 220, 245, 255, 265
+pn65_11 : 10
+pn13_11 : 3
+pn7_11 : 5
+pns11_12hi : 3
+pn11_12adj : 0.4
+!
+! Nighttime snow thresholds
+ns11_4lo : 0.7, 0.6, 0.5, 1
+ns4_12hi : 6, 5.5, 5, 1
+nsco2 : 222, 224, 226, 1
+nsh20 : 215, 220, 225, 1
+n65_11 : 10
+ns11_12hi : 3
+ns11_12adj : 0.4
+!
+! Daytime ocean thresholds
+do11_12hi : 3
+do11_4lo : -10, -8, -6, 1
+dobt11 : 267, 270, 273, 1
+doco2 : 222, 224, 226, 1
+doh20 : 215, 220, 225, 1
+doref2 : 0.065, 0.045, 0.03, 1
+doref3 : 0.04, 0.035, 0.03, 1
+dovrathi : 0.95, 1.1, 1.15, 1
+dovratlo : 0.95, 0.9, 0.85, 1
+dotci : 0.035, 0.005
+!
+! Daytime polar ocean thresholds
+pdo11_12hi : 3
+pdo11_4lo : -10, -8, -6, 1
+pdobt11 : 267, 270, 273, 1
+pdoh20 : 215, 220, 225, 1
+pdoref2 : 0.065, 0.045, 0.03, 1
+pdoref3 : 0.035, 0.0125, 0.005, 1
+pdovrathi : 0.95, 1.1, 1.15, 1
+pdovratlo : 0.95, 0.9, 0.85, 1
+pdotci : 0.035, 0.005
+!
+! Nighttime ocean thresholds
+no11_12hi : 3
+no11_4lo : 1.25, 1, -1, 1
+nobt11 : 267, 270, 273, 1
+noco2 : 222, 224, 226, 1
+noh20 : 215, 220, 225, 1
+no86_73 : 16, 17, 18, 1
+no_11var : 3, 6, 7, 1
+!
+! Nighttime polar ocean thresholds
+pno11_12hi : 3
+pno11_4lo : 1.25, 1, -1, 1
+pnobt11 : 267, 270, 273, 1
+pnoh20 : 215, 220, 225, 1
+pno86_73 : 16, 17, 18, 1
+pno_11var : 3, 6, 7, 1
+!
+! Shadow thresholds
+shadnir : 0.07, 0.01
+shavrat : 0.3
+shad124 : 0.2
+!
+! Sun glint thresholds
+snglntv : 0.7, 0.9, 1.1, 1
+snglntvch : 0.95, 1.05, 1.2, 1
+snglntvcl : 1, 1.05, 1.05, 1
+sg_tbdfl : 13
+sg_tbdfh : 30
+snglrat : 3
+snglnt0 : 0.115, 0.105, 0.095, 1
+snglnt10 : 0.11, 0.08, 0.01, 1
+snglnt20 : 0.08, 0.05, 0.01, 1
+snglnt_bounds : 0, 10, 20, 36
+!
+! Land restoral thresholds
+ldsr5_4_thr : 2
+ldr5_4_thr : 3
+ld20m22 : 11
+ld22m31 : 20
+ldsbt11 : 295, 300, 305
+ldsbt11bd : 290, 295, 305
+lnbt11 : 287.5, 292.5, 297.5
+!
+! Day time ocean spatial variability threshold
+dovar11 : 0.6
+!
+! Non-cloud obstruction thresholds
+nc_bt37 : 350
+nc37_11 : 10
+nc21 : 20
+nc11_12 : -1
+ncrat : 0.85
+ncvrat : 1
+ncsig : 0.04
+!
+! Snow mask thresholds
+sm_bt11 : 280
+sm_ndsi : 0.4
+sm_ref2 : 0.11
+sm_ref3 : 0.0525
+sm_co2 : 224
+sm85_11 : 0.5
+sm37_11 : 9
+sm37_11hel : 10
+sm_mnir : 0.17
+!
+! Coast and shallow ocean ndvi thresholds
+swc_ndvi : -0.18, 0.4
+!
+! pfmft and nfmft thresholds
+pfmft_land : 4, 3.5, 3, 1
+pfmft_ocean : 1.9, 1.8, 1.7, 1
+pfmft_snow : 2, 1.5, 1, 1
+pfmft_cold : 2, 1.5, 1, 1
+nfmft_land : -23, -22.5, -22, 1
+nfmft_ocean : -1, 0, 1, 1
+nfmft_snow : -6, -5.5, -5, 1
+nfmft_desert : -6, -5, -5, 1
+pfmft_11maxthre : 310
+pfmft_btd_min : 0
+nfmft_maxthre : 1.5

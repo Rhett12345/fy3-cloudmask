@@ -5,7 +5,7 @@
 ! All per-pixel state variables are declared with the threadprivate directive
 ! so that each OpenMP thread has its own private copy.
 !
-! Original: retrieval_system_V3.1_cldmask/src/cloudmask/cloudmask_data_arrays.f90
+! Original: coeff/src/cloudmask/cloudmask_data_arrays.f90
 ! =============================================================================
 
 module cloudmask_data_arrays

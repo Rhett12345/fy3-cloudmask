@@ -141,9 +141,18 @@ def process_swath_native(
     snow_mask = np.ascontiguousarray(snow_mask, dtype=np.int8)
     btclr = np.ascontiguousarray(btclr, dtype=np.float32)
 
+    # Get code root path for threshold file lookup
+    import os
+    code_root = os.environ.get('FY3_CODE_ROOT', '')
+    if not code_root:
+        code_root = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'coeff')
+        code_root = os.path.normpath(code_root)
+    if not code_root.endswith('/'):
+        code_root += '/'
+
     # Call native engine
     return _cloudmask_native.process_swath(
         ref_vis, tbb_ir, lat, lon, satzen, solzen, relaz, glint,
         sfctmp, pmsl, uwind, vwind, tpw, elev, eco, snow_mask, btclr,
-        n_elem, n_line
+        n_elem, n_line, code_root
     )

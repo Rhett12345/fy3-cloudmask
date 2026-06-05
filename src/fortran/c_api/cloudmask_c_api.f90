@@ -4,7 +4,7 @@
 ! ISO_C_BINDING wrapper for the FY-3D MERSI-II cloud mask algorithm.
 ! This file exposes a single C-callable function that processes the entire
 ! swath with OpenMP parallelization. It calls the existing Fortran subroutines
-! from the original retrieval_system_V3.1_cldmask codebase.
+! from the original coeff codebase.
 !
 ! Architecture: C++ (OpenMP pixel loop) -> this wrapper -> existing Fortran subroutines
 ! =============================================================================
@@ -26,6 +26,19 @@ module cloudmask_c_api_mod
     include 'global.inc'
 
 contains
+
+    ! =========================================================================
+    ! set_code_root_path_c -- Set the code root path for threshold file lookup.
+    ! =========================================================================
+    subroutine set_code_root_path_c(path_in, path_len) bind(C, name='set_code_root_path_c')
+        character(c_char), intent(in) :: path_in(*)
+        integer(c_int), value, intent(in) :: path_len
+        integer :: i
+        code_root_path = ' '
+        do i = 1, min(path_len, 1000)
+            code_root_path(i:i) = path_in(i)
+        end do
+    end subroutine set_code_root_path_c
 
     ! =========================================================================
     ! process_pixel_c -- C-callable per-pixel cloud mask algorithm.
@@ -120,6 +133,17 @@ contains
         u_wind = uwind_in
         v_wind = vwind_in
         precip_water = tpw_in
+
+        ! Count valid bands (nbands)
+        nbands = 0
+        do k = 1, 19
+            if (pxldat_local(k) > -99.0 .and. pxldat_local(k) <= 2.3) &
+                nbands = nbands + 1
+        end do
+        do k = 20, 25
+            if (pxldat_local(k) > 0.0 .and. pxldat_local(k) < 1000.0) &
+                nbands = nbands + 1
+        end do
 
         ! Set LSF from ecosystem type (simplified heuristic)
         ! In the original code, LSF comes from ancillary data.
@@ -318,7 +342,7 @@ contains
         if (len_trim(code_root_path) == 0) then
             call get_environment_variable('FY3_CODE_ROOT', code_root_path)
             if (len_trim(code_root_path) == 0) then
-                code_root_path = '../retrieval_system_V3.1_cldmask/'
+                code_root_path = '../coeff/'
             end if
         end if
 

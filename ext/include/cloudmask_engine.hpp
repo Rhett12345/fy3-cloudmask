@@ -64,6 +64,12 @@ struct SwathResult {
 
 extern "C" {
     /**
+     * Set the code root path for threshold file lookup.
+     * Must be called before process_swath_c.
+     */
+    void set_code_root_path_c(const char* path, int path_len);
+
+    /**
      * Process a single pixel through the cloud mask algorithm.
      * Thread-safe: each call uses threadprivate Fortran module state.
      */
