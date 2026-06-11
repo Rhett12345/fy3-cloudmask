@@ -205,9 +205,10 @@
         ngtests(1) = ngtests(1) + 1
       endif
       
-!   nfmft test
+!   nfmft test (skip if btclr is zero - no clear-sky reference)
       if (nint(masir11) .ne. nint(bad_data) .and.   &
           nint(masir12) .ne. nint(bad_data) .and.   &
+          (btclr(5) .ne. 0.0 .or. btclr(6) .ne. 0.0) .and.   &
           (masir11-masir12) <= nfmft_maxthre(1) ) then
         nmtests = nmtests + 1
         !tv11_12 = (btclr(5) - btclr(6)) - (masir11 - masir12)

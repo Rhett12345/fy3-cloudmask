@@ -275,7 +275,9 @@ def main():
     if 'OMP_NUM_THREADS' not in os.environ:
         os.environ['OMP_NUM_THREADS'] = '1'
 
-    os.makedirs(args.output, exist_ok=True)
+    # Output goes to {output}/{date}/
+    date_output = os.path.join(args.output, args.date)
+    os.makedirs(date_output, exist_ok=True)
 
     # Find test orbits
     orbits = find_test_orbits(args.date)
@@ -302,7 +304,7 @@ def main():
         logger.info(f"  L1b: {orbit['l1b'].name}")
 
         # Process with onboard calibration
-        onboard_path = os.path.join(args.output, f"FY3D_MERSI_{args.date}_{time_tag}_CLM_CLA_onboard.h5")
+        onboard_path = os.path.join(date_output, f"FY3D_MERSI_{args.date}_{time_tag}_CLM_CLA_onboard.h5")
         logger.info(f"  [1/2] Onboard calibration...")
         stats_on = process_and_save(
             str(orbit['l1b']), str(orbit['geo']), str(orbit['nwp']),
@@ -311,7 +313,7 @@ def main():
         )
 
         # Process with recalibration
-        recal_path = os.path.join(args.output, f"FY3D_MERSI_{args.date}_{time_tag}_CLM_CLA_recal.h5")
+        recal_path = os.path.join(date_output, f"FY3D_MERSI_{args.date}_{time_tag}_CLM_CLA_recal.h5")
         logger.info(f"  [2/2] Recalibration...")
         stats_re = process_and_save(
             str(orbit['l1b']), str(orbit['geo']), str(orbit['nwp']),
@@ -338,7 +340,7 @@ def main():
         logger.info(f"    Category changes: {comparison['category_changes']}")
 
     # Save summary
-    summary_path = os.path.join(args.output, 'comparison_summary.json')
+    summary_path = os.path.join(date_output, 'comparison_summary.json')
     with open(summary_path, 'w') as f:
         json.dump(results, f, indent=2)
 
@@ -361,7 +363,7 @@ def main():
               f"{on_clear:>10.2f} {re_clear:>10.2f} {change_str:>15}")
 
     print(f"{'='*80}")
-    print(f"Full results saved to: {args.output}")
+    print(f"Full results saved to: {date_output}")
 
 
 if __name__ == '__main__':

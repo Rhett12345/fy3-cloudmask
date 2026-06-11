@@ -137,9 +137,8 @@ def classify_pixel_surface(
     flags = PixelFlags()
     pxldat = pxldat.copy()
 
-    # For FY-3D (sensor_id > 20), swap bands 5 and 19
-    if sensor_id > 20:
-        pxldat[BAND_138], pxldat[BAND_103] = pxldat[BAND_103], pxldat[BAND_138]
+    # Note: Band swap removed - using correct band indices directly
+    # Band 5 (1.38um) is at index 4, Band 19 (1.03um) is at index 18
 
     # Initialize NWP-derived values
     sfctmp = nwp_sfctmp if nwp_sfctmp > 0 else BAD_DATA

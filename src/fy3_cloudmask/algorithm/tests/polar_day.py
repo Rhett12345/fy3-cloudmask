@@ -61,7 +61,7 @@ def polar_day_land(
     Returns:
         Tuple of (confidence, n_tests, n_bands).
     """
-    thr = thresholds.get('polar_day_land', {})
+    thr = thresholds.get('land_day_polar', {})
     pfmft_thr = thresholds.get('pfmft', {})
     nfmft_thr = thresholds.get('nfmft', {})
 
@@ -105,9 +105,8 @@ def polar_day_land(
         else:
             pfmft_land = pfmft_thr.get('land', [4.0, 3.5, 3.0, 1.0])
             c1 = conf_test_thresholds(tv11_12, np.array(pfmft_land, dtype=np.float64))
-        # Note: In Fortran, cmin1 update is commented out
-        # cmin1 = min(cmin1, c1)
-        # ngtests[0] += 1
+        cmin1 = min(cmin1, c1)
+        ngtests[0] += 1
 
     # NFMFT test
     nfmft_max = nfmft_thr.get('max_threshold', 1.50)
@@ -120,9 +119,8 @@ def polar_day_land(
         nbands = max(nbands, 2)
         nfmft_land = nfmft_thr.get('land', [-23.0, -22.5, -22.0, 1.0])
         c2 = conf_test_thresholds(tv11_12, np.array(nfmft_land, dtype=np.float64))
-        # Note: In Fortran, cmin1 update is commented out
-        # cmin1 = min(cmin1, c2)
-        # ngtests[0] += 1
+        cmin1 = min(cmin1, c2)
+        ngtests[0] += 1
 
     # ================================================================
     # GROUP 2: BTD tests
@@ -152,14 +150,14 @@ def polar_day_land(
         cmin2 = min(cmin2, c5)
         ngtests[1] += 1
 
-    # 11-4um BTD test
-    if masir11 > BAD_DATA + 1.0 and masir4 > BAD_DATA + 1.0:
+    # 11-4um BTD test (only when visible data is usable)
+    if visusd and masir11 > BAD_DATA + 1.0 and masir4 > BAD_DATA + 1.0:
         nmtests += 1
         nbands = max(nbands, 2)
         set_bit(qa_bits, 19)
         mas11_4 = masir11 - masir4
         btd_11_4 = thr.get('btd_11_4', [-14.0, -12.0, -10.0, 1.0])
-        if mas11_4 <= btd_11_4[1]:
+        if mas11_4 >= btd_11_4[1]:
             set_bit(testbits, 19)
         c3 = conf_test_thresholds(mas11_4, np.array(btd_11_4, dtype=np.float64))
         cmin2 = min(cmin2, c3)
@@ -281,7 +279,7 @@ def polar_day_desert(
 
     Port of PolarDay_desert.f90.
     """
-    thr = thresholds.get('polar_day_desert', {})
+    thr = thresholds.get('land_day_desert', {})
 
     nmtests = 0
     nbands = 0
@@ -435,7 +433,7 @@ def polar_day_snow(
 
     Port of PolarDay_snow.f90.
     """
-    thr = thresholds.get('polar_day_snow', {})
+    thr = thresholds.get('day_snow_polar', {})
     pfmft_thr = thresholds.get('pfmft', {})
 
     nmtests = 0

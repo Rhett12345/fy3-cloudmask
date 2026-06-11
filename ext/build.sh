@@ -43,20 +43,41 @@ fi
 # =============================================================================
 echo "=== Checking toolchain ==="
 
-CONDA_PREFIX="${CONDA_PREFIX:-$(dirname $(dirname $(which python3)))}"
+# Find compilers: prefer system, fallback to conda
+find_compiler() {
+    local name="$1"
+    local conda_name="$2"
+    # Try conda prefix first
+    if [ -n "$CONDA_PREFIX" ] && [ -x "$CONDA_PREFIX/bin/$conda_name" ]; then
+        echo "$CONDA_PREFIX/bin/$conda_name"
+        return
+    fi
+    # Try system
+    if command -v "$name" &>/dev/null; then
+        echo "$(command -v "$name")"
+        return
+    fi
+    # Try conda default prefix
+    local default_conda="$(dirname $(dirname $(which python3 2>/dev/null || echo /usr/bin/python3)))"
+    if [ -x "$default_conda/bin/$conda_name" ]; then
+        echo "$default_conda/bin/$conda_name"
+        return
+    fi
+    echo ""
+}
 
-GFORTRAN="${CONDA_PREFIX}/bin/gfortran"
-GXX="${CONDA_PREFIX}/bin/x86_64-conda-linux-gnu-g++"
-GCC="${CONDA_PREFIX}/bin/x86_64-conda-linux-gnu-gcc"
+GFORTRAN=$(find_compiler gfortran gfortran)
+GXX=$(find_compiler g++ x86_64-conda-linux-gnu-g++)
+GCC=$(find_compiler gcc x86_64-conda-linux-gnu-gcc)
 
-[ ! -x "$GXX" ] && GXX="${CONDA_PREFIX}/bin/g++"
-[ ! -x "$GCC" ] && GCC="${CONDA_PREFIX}/bin/gcc"
-[ ! -x "$GXX" ] && GXX="$(which g++)"
-[ ! -x "$GCC" ] && GCC="$(which gcc)"
+# Fallback: plain g++/gcc if conda wrappers not found
+[ -z "$GXX" ] && GXX=$(find_compiler g++ g++)
+[ -z "$GCC" ] && GCC=$(find_compiler gcc gcc)
 
 for cmd in "$GFORTRAN" "$GXX" "$GCC"; do
-    if [ ! -x "$cmd" ]; then
+    if [ -z "$cmd" ] || [ ! -x "$cmd" ]; then
         echo "ERROR: Compiler not found: $cmd"
+        echo "Install: conda install gfortran_linux-64 gxx_linux-64 gcc_linux-64"
         exit 1
     fi
 done
@@ -64,7 +85,6 @@ done
 echo "  gfortran: $($GFORTRAN --version | head -1)"
 echo "  g++:      $($GXX --version | head -1)"
 echo "  gcc:      $($GCC --version | head -1)"
-echo "  CONDA_PREFIX: $CONDA_PREFIX"
 
 # Python / pybind11
 PYTHON=${PYTHON:-python3}
@@ -74,14 +94,27 @@ if ! $PYTHON -c "import pybind11" 2>/dev/null; then
 fi
 PYBIND11_INCLUDES=$($PYTHON -m pybind11 --includes)
 PYTHON_EXT=$($PYTHON -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
-echo "  Python: $($PYTHON --version)"
+PYTHON_VERSION=$($PYTHON -c "import sysconfig; print(sysconfig.get_config_var('SOABI'))")
+echo "  Python: $($PYTHON --version) ($PYTHON_VERSION)"
 
-# HDF5
-if [ ! -f "${CONDA_PREFIX}/lib/libhdf5.so" ] && [ ! -f "${CONDA_PREFIX}/lib/libhdf5.so.320" ]; then
+# HDF5 - find dynamically
+find_hdf5_lib() {
+    local search_dirs="${CONDA_PREFIX:-/usr}/lib /usr/lib/x86_64-linux-gnu /usr/lib64"
+    for dir in $search_dirs; do
+        if [ -f "$dir/libhdf5.so" ] || [ -f "$dir/libhdf5.so.310" ] || [ -f "$dir/libhdf5.so.200" ]; then
+            echo "$dir"
+            return
+        fi
+    done
+    echo ""
+}
+
+HDF5_LIB_DIR=$(find_hdf5_lib)
+if [ -z "$HDF5_LIB_DIR" ]; then
     echo "ERROR: HDF5 not found. Install: conda install hdf5"
     exit 1
 fi
-echo "  HDF5: found"
+echo "  HDF5: $HDF5_LIB_DIR"
 
 # =============================================================================
 # Source paths (all Fortran now lives under src/fortran/)
@@ -97,16 +130,17 @@ INCLUDE_DIR="$SCRIPT_DIR/include"
 echo "  Fortran source root: $FORTRAN_SRC"
 
 # =============================================================================
-# Compiler flags (NO -fdefault-integer-8)
+# Compiler flags
 # =============================================================================
 if [ $DEBUG -eq 1 ]; then
-    FFLAGS="-g -O0 -fopenmp -fPIC -ffree-line-length-none -fno-range-check"
-    CXXFLAGS="-g -O0 -fPIC -std=c++17"
+    FFLAGS="-g -O0 -fopenmp -fPIC -ffree-line-length-none -fno-range-check -Wall -Wextra -fcheck=all"
+    CXXFLAGS="-g -O0 -fPIC -std=c++17 -Wall -Wextra"
+    CFLAGS="-g -O0 -fPIC -Wall"
 else
-    FFLAGS="-O3 -fopenmp -fPIC -ffree-line-length-none -fno-range-check"
-    CXXFLAGS="-O2 -fPIC -std=c++17"
+    FFLAGS="-O3 -fopenmp -fPIC -ffree-line-length-none -fno-range-check -DNDEBUG"
+    CXXFLAGS="-O2 -fPIC -std=c++17 -DNDEBUG"
+    CFLAGS="-O2 -fPIC -DNDEBUG"
 fi
-CFLAGS="-O2 -fPIC"
 
 # =============================================================================
 # Create build directories + clean stale .mod
@@ -122,8 +156,6 @@ echo "  Cleaned."
 # =============================================================================
 # Fortran compilation helpers
 # =============================================================================
-# Include order: build_modules first, then c_api (has threadprivate override),
-# then cloudmask, core, utils
 FINCLUDES="-I$BUILD_DIR/fortran_modules -I$CAPI_DIR -I$CLOUDMASK_DIR -I$CORE_DIR -I$UTILS_DIR"
 MODOUT="-J$BUILD_DIR/fortran_modules"
 
@@ -251,13 +283,15 @@ echo "=== Linking ==="
 OUTPUT="$BUILD_DIR/_cloudmask_native${PYTHON_EXT}"
 FOBJS=$(find "$BUILD_DIR/obj" -name "*.o" | sort)
 
+# Use $ORIGIN-relative RPATH for portability
 $GXX -shared -fPIC $CXXFLAGS -fopenmp \
     $FOBJS \
     -o "$OUTPUT" \
-    -L"${CONDA_PREFIX}/lib" \
+    -L"$HDF5_LIB_DIR" \
     -lhdf5 -lhdf5_fortran \
     -lgfortran -lquadmath \
-    -Wl,-rpath,"${CONDA_PREFIX}/lib"
+    -Wl,-rpath,"\$ORIGIN/../lib" \
+    -Wl,-rpath,"$HDF5_LIB_DIR"
 
 echo ""
 echo "=== Build successful ==="
@@ -277,6 +311,8 @@ if ldd "$OUTPUT" 2>/dev/null | grep -qi "libifcore\|libifport"; then
 else
     echo "not found (OK)"
 fi
+echo -n "  RPATH: "
+readelf -d "$OUTPUT" 2>/dev/null | grep RPATH || echo "(none)"
 
 # =============================================================================
 # Install
@@ -292,7 +328,7 @@ if [ $INSTALL -eq 1 ]; then
     echo "=== Quick test ==="
     $PYTHON -c "
 import os
-os.environ.setdefault('FY3_CODE_ROOT', '$PROJECT_ROOT')
+os.environ.setdefault('FY3_CODE_ROOT', '$PROJECT_ROOT/coeff/')
 from fy3_cloudmask.algorithm.native_backend import is_native_available, get_backend_info
 print('  Native available:', is_native_available())
 info = get_backend_info()

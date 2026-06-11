@@ -159,6 +159,8 @@ def land_day_standard(
         cmin2 = min(cmin2, c3)
 
     # 11-4um BTD test (fog/low cloud)
+    # Note: confidence contribution commented out to match Fortran LandDay.f90
+    # where cmin2/ngtests lines are commented out (3.8um solar contamination)
     if masir11 > BAD_DATA + 1.0 and masir4 > BAD_DATA + 1.0:
         mas11_4 = masir11 - masir4
         btd_11_4 = thr.get('btd_11_4', [-14.0, -12.0, -10.0, 1.0])
@@ -168,10 +170,10 @@ def land_day_standard(
             set_bit(qa_bits, 19)
             nmtests += 1
             nbands = max(nbands, 2)
-            ngtests[1] += 1
+            # ngtests[1] += 1  # commented out to match Fortran
 
-        c4 = conf_test_thresholds(mas11_4, np.array(btd_11_4, dtype=np.float64))
-        cmin2 = min(cmin2, c4)
+        # c4 = conf_test_thresholds(mas11_4, np.array(btd_11_4, dtype=np.float64))
+        # cmin2 = min(cmin2, c4)  # commented out to match Fortran
 
     # ================================================================
     # GROUP 3: Visible reflectance tests

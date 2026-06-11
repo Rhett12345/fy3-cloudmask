@@ -13,7 +13,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import sys
@@ -160,22 +159,47 @@ def read_geo_data(geo_path: str) -> dict:
 
 
 def read_nwp_binary(nwp_path: str, nvar: int = 283) -> dict:
-    """Read GFS 0.25-degree binary NWP file."""
-    nlon, nlat = 1440, 721
+    """Read NWP binary file. Supports both gfs0p25 (0.25-deg) and fnl (1-deg) formats."""
     data = np.fromfile(nwp_path, dtype=np.float32)
-    expected = nlon * nlat * nvar
-    if data.size < expected:
-        raise ValueError(f"NWP file too small: {data.size} < {expected}")
-    arr = data[:expected].reshape(nvar, nlat, nlon)
-    arr_shifted = np.empty_like(arr)
-    arr_shifted[:, :, :720] = arr[:, :, 720:]
-    arr_shifted[:, :, 720:] = arr[:, :, :720]
-    return {
-        'lon': np.linspace(-180, 179.75, nlon),
-        'lat': np.linspace(-90, 90, nlat),
-        'tsfc': arr_shifted[2], 'pmsl': arr_shifted[1],
-        'u_wind': arr_shifted[7], 'v_wind': arr_shifted[8], 'tpw': arr_shifted[9],
-    }
+
+    # Detect format by file size
+    # gfs0p25: 1440x721x283 = 293,821,920 values (1.1GB)
+    # fnl: 360x181x179 = 11,633,640 values (44.5MB)
+    if data.size >= 293821920:
+        # gfs0p25 format (0.25-degree, 283 variables)
+        nlon, nlat = 1440, 721
+        nvar_actual = 283
+        arr = data[:nlon * nlat * nvar_actual].reshape(nvar_actual, nlat, nlon)
+        arr_shifted = np.empty_like(arr)
+        arr_shifted[:, :, :720] = arr[:, :, 720:]
+        arr_shifted[:, :, 720:] = arr[:, :, :720]
+        lon = np.linspace(-180, 179.75, nlon)
+        lat = np.linspace(-90, 90, nlat)
+        # Variable indices for gfs0p25: tsfc=2, pmsl=1, u_wind=7, v_wind=8, tpw=9
+        return {
+            'lon': lon, 'lat': lat,
+            'tsfc': arr_shifted[2], 'pmsl': arr_shifted[1],
+            'u_wind': arr_shifted[7], 'v_wind': arr_shifted[8], 'tpw': arr_shifted[9],
+        }
+    else:
+        # fnl format (1-degree, 179 variables)
+        nlon, nlat = 360, 181
+        nvar_actual = data.size // (nlon * nlat)
+        if nvar_actual < 10:
+            raise ValueError(f"NWP file too small for fnl format: {data.size} values")
+        arr = data[:nvar_actual * nlat * nlon].reshape(nvar_actual, nlat, nlon)
+        # fnl format: longitude starts at 0, shift to -180..180
+        arr_shifted = np.empty_like(arr)
+        arr_shifted[:, :, :180] = arr[:, :, 180:]
+        arr_shifted[:, :, 180:] = arr[:, :, :180]
+        lon = np.linspace(-180, 179, nlon)
+        lat = np.linspace(-90, 90, nlat)
+        # Variable indices for fnl: pmsl=1, tsfc=2, u_wind=4, v_wind=5, tpw=9
+        return {
+            'lon': lon, 'lat': lat,
+            'tsfc': arr_shifted[2], 'pmsl': arr_shifted[1],
+            'u_wind': arr_shifted[4], 'v_wind': arr_shifted[5], 'tpw': arr_shifted[9],
+        }
 
 
 def interpolate_nwp(nwp: dict, lat_px: np.ndarray, lon_px: np.ndarray) -> dict:
@@ -198,6 +222,7 @@ def run_single_orbit(
     output_dir: str,
     recal_cal0: np.ndarray | None = None,
     recal_cal1: np.ndarray | None = None,
+    suffix: str = "",
 ) -> dict:
     """Process one orbit with Fortran-only backend. Returns timing/stats dict.
 
@@ -212,7 +237,8 @@ def run_single_orbit(
     """
     orbit_tag = Path(l1b_path).stem.split('_1000M')[0].split('_')[-2:]
     orbit_tag = '_'.join(orbit_tag)
-    orbit_dir = os.path.join(output_dir, orbit_tag)
+    date_dir = orbit_tag[:8]
+    orbit_dir = os.path.join(output_dir, date_dir)
     os.makedirs(orbit_dir, exist_ok=True)
 
     logger.info(f"Processing orbit: {orbit_tag}")
@@ -278,11 +304,17 @@ def run_single_orbit(
 
     # Phase 4: Save output
     t_save_start = time.time()
-    np.savez_compressed(os.path.join(orbit_dir, 'fortran_output.npz'),
-                        cloud_mask=result['cloud_mask'].astype(np.int8),
-                        confidence=result['confidence'].astype(np.float32),
-                        testbits=result.get('cm_bitarray', result.get('testbits', np.zeros((n_elem, n_line, 6), dtype=np.uint8))).astype(np.uint8),
-                        qa_bits=result.get('qa_bitarray', result.get('qa_bits', np.zeros((n_elem, n_line, 10), dtype=np.uint8))).astype(np.uint8))
+    h5_path = os.path.join(orbit_dir, f'FY3D_MERSI_{orbit_tag}_CLM_CLA{suffix}.h5')
+    with h5py.File(h5_path, 'w') as f:
+        grp = f.create_group('Cloud_Mask_1km')
+        grp.create_dataset('Latitude',  data=geo['lat'].astype(np.float32))
+        grp.create_dataset('Longitude', data=geo['lon'].astype(np.float32))
+        grp.create_dataset('Cloud_Mask_Value', data=result['cloud_mask'].astype(np.int8))
+        grp.create_dataset('Confidence', data=result['confidence'].astype(np.float32))
+        tb = result.get('cm_bitarray', result.get('testbits', np.zeros((n_elem, n_line, 6), dtype=np.uint8)))
+        qa = result.get('qa_bitarray', result.get('qa_bits', np.zeros((n_elem, n_line, 10), dtype=np.uint8)))
+        grp.create_dataset('TestBits', data=tb.astype(np.uint8))
+        grp.create_dataset('QA_Bits',  data=qa.astype(np.uint8))
     t_save = time.time() - t_save_start
 
     t_total = t_io_total + t_prep + t_fortran + t_save
@@ -332,10 +364,6 @@ def run_single_orbit(
         'throughput_mpix_per_sec': (n_total / 1e6) / t_fortran if t_fortran > 0 else 0,
     }
 
-    # Save metadata
-    with open(os.path.join(orbit_dir, 'metadata.json'), 'w') as f:
-        json.dump(stats, f, indent=2)
-
     logger.info(f"  Done in {t_total:.1f}s (Fortran: {t_fortran:.1f}s, "
                 f"IO: {t_io_total:.1f}s, throughput: {stats['throughput_mpix_per_sec']:.1f} Mpix/s)")
     logger.info(f"  Valid: {n_valid}/{n_total}, stability: {stability}")
@@ -353,6 +381,8 @@ def main():
     parser.add_argument("--max-orbits", type=int, default=3, help="Max orbits per date")
     parser.add_argument("--recal-dir", default=None,
                         help="Path to recalibration data directory (e.g., ../fy3d_recali)")
+    parser.add_argument("--date", default=None,
+                        help="Process specific date (YYYYMMDD) instead of hardcoded list")
     args = parser.parse_args()
 
     os.environ['OMP_NUM_THREADS'] = str(args.omp_threads)
@@ -378,7 +408,13 @@ def main():
     os.makedirs(args.output, exist_ok=True)
     all_stats = []
 
-    for date_str, category, description in CONFIRMED_DATES:
+    # Use provided date or hardcoded list
+    if args.date:
+        dates_to_process = [(args.date, "custom", f"Custom date {args.date}")]
+    else:
+        dates_to_process = CONFIRMED_DATES
+
+    for date_str, category, description in dates_to_process:
         logger.info(f"\n{'='*60}")
         logger.info(f"Date: {date_str} ({category}) - {description}")
         logger.info(f"{'='*60}")
@@ -399,29 +435,59 @@ def main():
 
         selected = triplets[:args.max_orbits]
         for t in selected:
-            try:
-                stats = run_single_orbit(
-                    l1b_path=str(t['l1b']),
-                    geo_path=str(t['geo']),
-                    nwp_path=str(t['nwp']),
-                    output_dir=args.output,
-                    recal_cal0=recal_cal0,
-                    recal_cal1=recal_cal1,
-                )
-                stats['date'] = date_str
-                stats['category'] = category
-                stats['description'] = description
-                stats['recalibration'] = recal_cal0 is not None
-                all_stats.append(stats)
-            except Exception as e:
-                logger.error(f"  Failed: {e}")
-                import traceback
-                traceback.print_exc()
+            l1b = str(t['l1b'])
+            orbit_tag = '_'.join(Path(l1b).stem.split('_1000M')[0].split('_')[-2:])
+            date_orbit_dir = os.path.join(args.output, date_str)
 
-    # Save summary
-    summary_path = os.path.join(args.output, 'summary.json')
-    with open(summary_path, 'w') as f:
-        json.dump(all_stats, f, indent=2)
+            # Onboard calibration
+            onboard_h5 = os.path.join(date_orbit_dir, f'FY3D_MERSI_{orbit_tag}_CLM_CLA.h5')
+            if os.path.exists(onboard_h5):
+                logger.info(f"  [SKIP] {orbit_tag} onboard (exists)")
+            else:
+                try:
+                    stats = run_single_orbit(
+                        l1b_path=l1b,
+                        geo_path=str(t['geo']),
+                        nwp_path=str(t['nwp']),
+                        output_dir=args.output,
+                        suffix="",
+                    )
+                    stats['date'] = date_str
+                    stats['category'] = category
+                    stats['description'] = description
+                    stats['recalibration'] = False
+                    all_stats.append(stats)
+                except Exception as e:
+                    logger.error(f"  Failed (onboard): {e}")
+                    import traceback
+                    traceback.print_exc()
+
+            # Recalibration
+            recal_h5 = os.path.join(date_orbit_dir, f'FY3D_MERSI_{orbit_tag}_CLM_CLA_recal.h5')
+            if recal_cal0 is None:
+                pass
+            elif os.path.exists(recal_h5):
+                logger.info(f"  [SKIP] {orbit_tag} recal (exists)")
+            else:
+                try:
+                    stats = run_single_orbit(
+                        l1b_path=l1b,
+                        geo_path=str(t['geo']),
+                        nwp_path=str(t['nwp']),
+                        output_dir=args.output,
+                        recal_cal0=recal_cal0,
+                        recal_cal1=recal_cal1,
+                        suffix="_recal",
+                    )
+                    stats['date'] = date_str
+                    stats['category'] = category
+                    stats['description'] = description
+                    stats['recalibration'] = True
+                    all_stats.append(stats)
+                except Exception as e:
+                    logger.error(f"  Failed (recal): {e}")
+                    import traceback
+                    traceback.print_exc()
 
     # Print summary table
     print(f"\n{'='*100}")

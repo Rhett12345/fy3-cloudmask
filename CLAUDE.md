@@ -89,3 +89,6 @@ Thresholds were converted from Fortran namelist format via `scripts/convert_thre
 - **Numba cold start**: First invocation of JIT-compiled functions is slow (~30s). Subsequent calls are fast.
 - **E2E tests need real data**: `test_pipeline_e2e.py` expects FY-3D L1b/GEO HDF files in `tests/reference_data/`. Unit and integration tests use synthetic data and run without external files.
 - **Constants are authoritative**: All band mappings, bit positions, and magic numbers live in `constants.py`. Do not hardcode numeric indices — import from constants.
+
+代码的主要功能依赖是fortran，而不是python，我之后拿去部署的工程化代码也是使用fortran。
+一定要保障fortran的可用性

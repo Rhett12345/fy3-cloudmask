@@ -142,16 +142,16 @@ def day_snow(
         cmin2 = min(cmin2, c5)
         ngtests[1] += 1
 
-    # 11-4um BTD test
+    # 3.8-11um BTD test (Fortran: mas11_4 = masir4 - masir11)
     if masir11 > BAD_DATA + 1.0 and masir4 > BAD_DATA + 1.0:
         nmtests += 1
         nbands = max(nbands, 2)
         set_bit(qa_bits, 19)
-        mas11_4 = masir11 - masir4
-        btd_11_4 = thr.get('btd_11_4', [-14.0, -12.0, -10.0, 1.0])
-        if mas11_4 >= btd_11_4[1]:
+        mas4_11 = masir4 - masir11
+        btd_38_11 = thr.get('btd_38_11', [17.5, 14.5, 11.5, 1.0])
+        if mas4_11 <= btd_38_11[1]:
             set_bit(testbits, 19)
-        c3 = conf_test_thresholds(mas11_4, np.array(btd_11_4, dtype=np.float64))
+        c3 = conf_test_thresholds(mas4_11, np.array(btd_38_11, dtype=np.float64))
         cmin2 = min(cmin2, c3)
         ngtests[1] += 1
 
@@ -359,7 +359,7 @@ def nite_snow(
         set_bit(qa_bits, 19)
         mas11_4 = masir11 - masir4
         btd_11_4 = thr.get('btd_11_4', [-14.0, -12.0, -10.0, 1.0])
-        if mas11_4 >= btd_11_4[1]:
+        if mas11_4 <= btd_11_4[1]:
             set_bit(testbits, 19)
         c3 = conf_test_thresholds(mas11_4, np.array(btd_11_4, dtype=np.float64))
         cmin2 = min(cmin2, c3)

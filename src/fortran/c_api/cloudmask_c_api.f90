@@ -334,9 +334,6 @@ contains
         ! This should be passed from Python, but we use a default for now
         if (fylat_sensor_id == 0) fylat_sensor_id = 21
 
-        write(*,*) 'DBG: process_swath_c entered, nElem=', nElem, ' nLine=', nLine
-        flush(6)
-
         ! Set code root path for threshold file lookup
         ! The threshold file is at: {code_root_path}/coeff/fylat_thresholds.mersi.ii3d.v8
         if (len_trim(code_root_path) == 0) then
@@ -346,31 +343,20 @@ contains
             end if
         end if
 
-        write(*,*) 'DBG: code_root_path=', trim(code_root_path)
-        flush(6)
-
         ! Load thresholds (must be done before parallel region)
-        write(*,*) 'DBG: calling thresholds_read...'
-        flush(6)
         call thresholds_read(fylat_sensor_id)
-        write(*,*) 'DBG: thresholds_read done'
-        flush(6)
 
         ! Set sat structure dimensions (needed by chk_ele_lin_edge, check_reg_uniformity)
         sat%nElem = nElem
         sat%nLine = nLine
 
         ! Allocate sat pointer arrays used by check_reg_uniformity
-        write(*,*) 'DBG: allocating sat arrays...'
-        flush(6)
         if (associated(sat%eco)) deallocate(sat%eco)
         if (associated(sat%snow_mask)) deallocate(sat%snow_mask)
         allocate(sat%eco(nElem, nLine))
         allocate(sat%snow_mask(nElem, nLine))
         sat%eco = eco_arr
         sat%snow_mask = snow_mask_arr
-        write(*,*) 'DBG: sat arrays allocated'
-        flush(6)
 
         ! Allocate geo%lsm used by check_reg_uniformity
         if (associated(geo%lsm)) deallocate(geo%lsm)
@@ -398,9 +384,6 @@ contains
         out_nbands_arr   = 0
         out_shadow_arr   = 0
         out_smoke_arr    = 0
-
-        write(*,*) 'DBG: entering parallel loop...'
-        flush(6)
 
         ! === Main pixel loop with OpenMP parallelization ===
         !$omp parallel do schedule(dynamic, 8) &

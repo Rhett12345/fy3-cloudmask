@@ -1,0 +1,25 @@
+# FY-3D Cloud Mask - Conda Environment Specification
+# Usage: conda env create -f environment.yml
+name: cloudmask
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy>=1.20,<2.0
+  - numba>=0.50
+  - h5py>=3.0
+  - pyyaml>=5.0
+  - click>=8.0
+  - pytest>=7.0
+  # Native backend build dependencies
+  - gfortran_linux-64>=12.0
+  - gxx_linux-64>=12.0
+  - gcc_linux-64>=12.0
+  - hdf5=1.14.*
+  - hdf5-static
+  - pybind11>=2.10
+  # Optional
+  - matplotlib
+  - xarray
+  - cfgrib

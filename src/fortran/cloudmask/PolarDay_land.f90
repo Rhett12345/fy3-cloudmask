@@ -188,14 +188,14 @@
            call conf_test(tv11_12,pfmft_land(1),pfmft_land(3),pfmft_land(4),   &
                           pfmft_land(2),1,c1)
         endif
-!        cmin1 = min(cmin1,c1)
-!        cmin1 = 1.0  ! added by minmin 20180322
-!        ngtests(1) = ngtests(1) + 1
+        cmin1 = min(cmin1,c1)
+        ngtests(1) = ngtests(1) + 1
       endif
-      
-!   nfmft test
+
+!   nfmft test (skip if btclr is zero - no clear-sky reference)
       if (nint(masir11) .ne. nint(bad_data) .and.   &
           nint(masir12) .ne. nint(bad_data) .and.   &
+          (btclr(5) .ne. 0.0 .or. btclr(6) .ne. 0.0) .and.   &
           (masir11-masir12) <= nfmft_maxthre(1) ) then
 !        nmtests = nmtests + 1
         !tv11_12 = (btclr(5) - btclr(6)) - (masir11 - masir12)
@@ -207,9 +207,8 @@
         !end if
         call conf_test(tv11_12,nfmft_land(1),nfmft_land(3),nfmft_land(4),   &
                        nfmft_land(2),1,c2)
-!        cmin1 = min(cmin1,c2)
-!        cmin1 = 1.0  ! added by minmin 20180322
-!        ngtests(1) = ngtests(1) + 1
+        cmin1 = min(cmin1,c2)
+        ngtests(1) = ngtests(1) + 1
       endif
       
       

@@ -101,7 +101,7 @@ subroutine LandDay_desert(pxldat,vza,visusd,cirrus_vis,   &
 ! ... initialize variables
       pi = acos(-1.0)
       dtr = pi/180.0
-      
+
 ! ... nmtests counts the number of tests applied to this pixel
       nmtests = 0
 
@@ -191,9 +191,10 @@ subroutine LandDay_desert(pxldat,vza,visusd,cirrus_vis,   &
         ngtests(1) = ngtests(1) + 1
       endif
       
-!   nfmft test
+!   nfmft test (skip if btclr is zero - no clear-sky reference)
       if (nint(masir11) .ne. nint(bad_data) .and.   &
           nint(masir12) .ne. nint(bad_data) .and.   &
+          (btclr(5) .ne. 0.0 .or. btclr(6) .ne. 0.0) .and.   &
           (masir11-masir12) <= nfmft_maxthre(1) ) then
         nmtests = nmtests + 1
         !tv11_12 = (btclr(5) - btclr(6)) - (masir11 - masir12)
@@ -337,8 +338,8 @@ subroutine LandDay_desert(pxldat,vza,visusd,cirrus_vis,   &
             midpta(2) = lds11_4hi(2)
            
             call conf_test_2val(mas11_4,locuta,hicuta,1.0,midpta,2,c4)
-            !cmin2 = min(cmin2,c4)
-            !ngtests(2) = ngtests(2) + 1
+            cmin2 = min(cmin2,c4)
+            ngtests(2) = ngtests(2) + 1
 !            print*,'c4',c4,'cmin2',cmin2      !jincheng
           endif
         end if

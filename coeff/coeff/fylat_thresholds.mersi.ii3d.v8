@@ -11,7 +11,7 @@ lds11_4lo_c : -20, -18, -16, 1
 ldsco2_c : 222, 224, 226, 1
 ldsh20_c : 215, 220, 225, 1
 ldsref2_c : 0.34, 0.3, 0.26, 1
-ldsref3_c : 0.04, 0.035, 0.03, 1
+ldsref3_c : 0.22, 0.18, 0.14, 1
 ldstci_c : 0.035, 0.0125
 !
 ! Daytime polar coastal desert thresholds
@@ -23,45 +23,45 @@ lds11_4lo : -25, -23, -21, 1
 ldsco2 : 222, 224, 226, 1
 ldsh20 : 215, 220, 225, 1
 ldsref2 : 0.42, 0.39, 0.36, 1
-ldsref3 : 0.04, 0.035, 0.03, 1
+ldsref3 : 0.22, 0.18, 0.14, 1
 ldstci : 0.035, 0.0125
 !
 ! Daytime polar desert thresholds
 !
 ! Daytime land thresholds
 dl11_12hi : 3
-dl11_4lo : -14, -12, -10, 1
+dl11_4lo : -34, -14, -4, 1
 dlco2 : 222, 224, 226, 1
 dlh20 : 215, 220, 225, 1
 dlref1 : 0.24, 0.2, 0.16, 1
-dlref3 : 0.04, 0.035, 0.03, 1
-dlvrat : 1.8, 1.85, 1.9, 1
+dlref3 : 0.22, 0.18, 0.14, 1
+dlvrat : 0.4, 0.6, 0.8, 1
 dltci : 0.035, 0.0125
 !
 ! Daytime polar land thresholds
 pdl11_12hi : 3
-pdl11_4lo : -14, -12, -10, 1
+pdl11_4lo : -34, -14, -4, 1
 pdlh20 : 215, 220, 225, 1
 pdlref1 : 0.22, 0.18, 0.14, 1
-pdlref3 : 0.04, 0.035, 0.03, 1
-pdlvrat : 1.8, 1.85, 1.9, 1
+pdlref3 : 0.22, 0.18, 0.14, 1
+pdlvrat : 0.4, 0.6, 0.8, 1
 pdltci : 0.035, 0.0125
 !
 ! Daytime coastal land thresholds
 dl11_12hi_t2 : 3
-dl11_4lo_t2 : -14, -12, -10, 1
+dl11_4lo_t2 : -34, -14, -4, 1
 dlco2_t2 : 222, 224, 226, 1
 dlh20_t2 : 215, 220, 225, 1
 dlref1_t2 : 0.22, 0.18, 0.14, 1
-dlref3_t2 : 0.04, 0.035, 0.03, 1
+dlref3_t2 : 0.22, 0.18, 0.14, 1
 dltci_t2 : 0.035, 0.0125
 !
 ! Daytime polar coastal land thresholds
 pdl11_12hi_t2 : 3
-pdl11_4lo_t2 : -14, -12, -10, 1
+pdl11_4lo_t2 : -34, -14, -4, 1
 pdlh20_t2 : 215, 220, 225, 1
 pdlref1_t2 : 0.22, 0.18, 0.14, 1
-pdlref3_t2 : 0.04, 0.035, 0.03, 1
+pdlref3_t2 : 0.22, 0.18, 0.14, 1
 pdltci_t2 : 0.035, 0.0125
 !
 ! Nighttime land thresholds
@@ -154,25 +154,25 @@ ns11_12adj : 0.4
 !
 ! Daytime ocean thresholds
 do11_12hi : 3
-do11_4lo : -10, -8, -6, 1
+do11_4lo : -37, -16, -2, 1
 dobt11 : 267, 270, 273, 1
 doco2 : 222, 224, 226, 1
 doh20 : 215, 220, 225, 1
 doref2 : 0.065, 0.045, 0.03, 1
 doref3 : 0.04, 0.035, 0.03, 1
-dovrathi : 0.95, 1.1, 1.15, 1
-dovratlo : 0.95, 0.9, 0.85, 1
+dovrathi : 0.45, 0.55, 0.65, 1
+dovratlo : 0.45, 0.35, 0.25, 1
 dotci : 0.035, 0.005
 !
 ! Daytime polar ocean thresholds
 pdo11_12hi : 3
-pdo11_4lo : -10, -8, -6, 1
+pdo11_4lo : -37, -16, -2, 1
 pdobt11 : 267, 270, 273, 1
 pdoh20 : 215, 220, 225, 1
 pdoref2 : 0.065, 0.045, 0.03, 1
 pdoref3 : 0.035, 0.0125, 0.005, 1
-pdovrathi : 0.95, 1.1, 1.15, 1
-pdovratlo : 0.95, 0.9, 0.85, 1
+pdovrathi : 0.45, 0.55, 0.65, 1
+pdovratlo : 0.45, 0.35, 0.25, 1
 pdotci : 0.035, 0.005
 !
 ! Nighttime ocean thresholds

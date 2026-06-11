@@ -52,7 +52,7 @@ def polar_nite_land(
     Returns:
         Tuple of (confidence, n_tests, n_bands).
     """
-    thr = thresholds.get('polar_nite_land', {})
+    thr = thresholds.get('land_nite_polar', {})
     pfmft_thr = thresholds.get('pfmft', {})
     nfmft_thr = thresholds.get('nfmft', {})
 
@@ -238,7 +238,7 @@ def polar_nite_snow(
 
     Port of PolarNite_snow.f90.
     """
-    thr = thresholds.get('polar_nite_snow', {})
+    thr = thresholds.get('nite_snow_polar', {})
     pfmft_thr = thresholds.get('pfmft', {})
     nfmft_thr = thresholds.get('nfmft', {})
 

@@ -25,11 +25,11 @@ from pathlib import Path
 # ============================================================
 # 目录配置 — 按实际情况修改
 # ============================================================
-MERSI_ROOT = Path('/data/Data_yuq/mersi')   # 子目录结构: YYYYMMDD/FY3D_*.HDF
+MERSI_ROOT = Path('/data/Data_yuq/mersi_test')   # 子目录结构: YYYYMMDD/FY3D_*.HDF
 NWP_ROOT   = Path('/data/nwp')              # 子目录结构: YYYYMMDD/ORG/gfs0p25_41L_*
 
 # NWP 文件名模板，时次为 00/03/06/09/12/15/18/21
-NWP_PATTERN = 'gfs0p25_41L_{date}_{hh}_00'
+NWP_PATTERN = 'fnl_{date}_{hh}_00'
 NWP_HOURS   = [0, 3, 6, 9, 12, 15, 18, 21]   # UTC, 整点时次
 
 
@@ -74,7 +74,7 @@ def _find_nwp(date_str: str, obs_hour: int) -> Path | None:
         date_str = prev_date
 
     fname = NWP_PATTERN.format(date=date_str, hh=f'{best_hh:02d}')
-    nwp_path = NWP_ROOT / date_str / 'ORG' / fname
+    nwp_path = NWP_ROOT / date_str / fname
     return nwp_path if nwp_path.exists() else None
 
 

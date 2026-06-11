@@ -15,19 +15,22 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
+#include <algorithm>
+#include <cstring>
 
 #include "include/cloudmask_engine.hpp"
 
 namespace py = pybind11;
 
 // ============================================================================
-// C-order to Fortran-order transpose helpers
+// C-order to Fortran-order transpose helpers (cache-blocked)
 // ============================================================================
+
+static constexpr int BLOCK = 32;
 
 /**
  * Transpose 2D C-order (nElem, nLine) -> Fortran-order memory layout.
- * The returned array is C-contiguous but with data reordered so that when
- * Fortran accesses it as (nElem, nLine) column-major, the values are correct.
+ * Uses cache-blocked tiling for better memory access patterns.
  */
 template<typename T>
 py::array_t<T> transpose_2d(py::array_t<T> arr, int nElem, int nLine) {
@@ -36,9 +39,16 @@ py::array_t<T> transpose_2d(py::array_t<T> arr, int nElem, int nLine) {
     auto out_buf = out.request();
     const T* src = static_cast<const T*>(buf.ptr);
     T* dst = static_cast<T*>(out_buf.ptr);
-    for (int j = 0; j < nLine; j++) {
-        for (int i = 0; i < nElem; i++) {
-            dst[i * nLine + j] = src[j * nElem + i];
+
+    for (int jj = 0; jj < nLine; jj += BLOCK) {
+        int jEnd = std::min(jj + BLOCK, nLine);
+        for (int ii = 0; ii < nElem; ii += BLOCK) {
+            int iEnd = std::min(ii + BLOCK, nElem);
+            for (int j = jj; j < jEnd; j++) {
+                for (int i = ii; i < iEnd; i++) {
+                    dst[i * nLine + j] = src[j * nElem + i];
+                }
+            }
         }
     }
     return out;
@@ -46,6 +56,7 @@ py::array_t<T> transpose_2d(py::array_t<T> arr, int nElem, int nLine) {
 
 /**
  * Transpose 3D C-order (nElem, nLine, K) -> Fortran-order memory layout.
+ * For small K (<=32), processes all K slices in inner loop for cache locality.
  */
 template<typename T>
 py::array_t<T> transpose_3d(py::array_t<T> arr, int nElem, int nLine, int K) {
@@ -54,10 +65,18 @@ py::array_t<T> transpose_3d(py::array_t<T> arr, int nElem, int nLine, int K) {
     auto out_buf = out.request();
     const T* src = static_cast<const T*>(buf.ptr);
     T* dst = static_cast<T*>(out_buf.ptr);
-    for (int j = 0; j < nLine; j++) {
-        for (int i = 0; i < nElem; i++) {
-            for (int k = 0; k < K; k++) {
-                dst[(k * nLine + j) * nElem + i] = src[(j * nElem + i) * K + k];
+
+    for (int jj = 0; jj < nLine; jj += BLOCK) {
+        int jEnd = std::min(jj + BLOCK, nLine);
+        for (int ii = 0; ii < nElem; ii += BLOCK) {
+            int iEnd = std::min(ii + BLOCK, nElem);
+            for (int j = jj; j < jEnd; j++) {
+                for (int i = ii; i < iEnd; i++) {
+                    const T* src_px = src + (j * nElem + i) * K;
+                    for (int k = 0; k < K; k++) {
+                        dst[(k * nLine + j) * nElem + i] = src_px[k];
+                    }
+                }
             }
         }
     }

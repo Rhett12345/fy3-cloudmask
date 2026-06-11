@@ -174,8 +174,8 @@ subroutine thresholds_read( sensor_id )
             STATUS= ANC_THRESHOLD_STATUS, &
             FORM= ANC_THRESHOLD_FORM,     &
             ACCESS= ANC_THRESHOLD_ACCESS, &
-            IOSTAT=io_err) 
-            
+            IOSTAT=io_err)
+
 ! ... Threshold parameter file version (for output to file)
       call param_string( lrn_thr_par, 'rcs_id', version )
       
@@ -734,7 +734,7 @@ subroutine param_real( PCF_NUM, NAME, NUMBER, ARRAY )
       
 ! ... Read parameter values into array
 
-      read( param_value, '(20f20.10)', iostat=ios ) ( array( i ), i = 1, number )
+      read( param_value, *, iostat=ios ) ( array( i ), i = 1, number )
       if ( ios .ne. 0 ) then
         write( string, '(a)' ) name( 1 : len( name ) )
 !        call message( 'param_real',

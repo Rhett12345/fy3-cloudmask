@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# C/C++/Fortran build artifacts
+*.o
+*.so
+*.a
+*.mod
+*.smod
+
+# Build directories
+ext/build/obj/
+ext/build/*.so
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data and output
+*.HDF
+*.hdf
+*.h5
+*.nc
+output/
+clm_plots/
+visualize/
+
+# Temp files
+fort.*
+*.log
