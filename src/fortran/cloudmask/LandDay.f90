@@ -205,9 +205,8 @@ subroutine LandDay(pxldat,vza,visusd,vrused,cirrus_vis,   &
         endif
         
          !  print*,'tv11_12=',tv11_12,c1
-!        cmin1 = min(cmin1,c1)
- !       cmin1 = 1.
-!        ngtests(1) = ngtests(1) + 1
+        cmin1 = min(cmin1,c1)
+        ngtests(1) = ngtests(1) + 1
       endif
       !print*,'vv1=',tv11_12,pfmft_land(1),pfmft_land(3),pfmft_land(4),pfmft_land(2)
       
@@ -225,9 +224,8 @@ subroutine LandDay(pxldat,vza,visusd,vrused,cirrus_vis,   &
         !end if
         call conf_test(tv11_12,nfmft_land(1),nfmft_land(3),nfmft_land(4),   &
                        nfmft_land(2),1,c2)
-  !      cmin1 = min(cmin1,c2)
-  !      cmin1 = 1.     ! added by minmin
-  !      ngtests(1) = ngtests(1) + 1
+        cmin1 = min(cmin1,c2)
+        ngtests(1) = ngtests(1) + 1
       endif
      ! print*,'vv2=',tv11_12, nfmft_land(1),nfmft_land(3),nfmft_land(4), nfmft_land(2)
 ! ... debug statement ............................................
@@ -329,8 +327,8 @@ subroutine LandDay(pxldat,vza,visusd,vrused,cirrus_vis,   &
           end if
           call conf_test(mas11_4,dl11_4lo(1),dl11_4lo(3),dl11_4lo(4),  &
                          dl11_4lo(2),1,c4)
-          cmin2 = min(cmin2,c4)
-          ngtests(2) = ngtests(2) + 1
+!         cmin2 = min(cmin2,c4)
+!         ngtests(2) = ngtests(2) + 1
         endif
 
 ! ... debug statement ............................................
