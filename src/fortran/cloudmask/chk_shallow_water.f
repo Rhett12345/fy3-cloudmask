@@ -76,7 +76,8 @@ c         Check for very low or very high ndvi values.
           call set_qa_bit(qa_bits,22)
           ndvi = (pxldat(4) - pxldat(3)) / (pxldat(4) + pxldat(3))
           if(ndvi .le. swc_ndvi(1) .or. ndvi .ge. swc_ndvi(2)) then
-            confdnc = 1.0
+c           Cap confidence for shallow water (bottom reflectance contamination)
+            confdnc = min(confdnc, 0.95)
             call set_bit(testbits,22)
           end if
 

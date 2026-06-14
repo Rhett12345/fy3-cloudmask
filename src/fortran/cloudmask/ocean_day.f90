@@ -424,19 +424,20 @@
 !       difference thresholds (function of viewing zenith
 !       and 11 micron brightness temperature).
         call tview(1,schi,r24,diftemp)
- 
+
         if (diftemp.lt.0.1 .or. abs(schi-99.0).lt.0.0001) then
           dfthrsh = do11_12hi(1)
         else
           dfthrsh = diftemp
         end if
- 
+
 !       Since the IR BTDIF bit has possibly been set already,
 !       change the bit only if the current test failed.
-        nmtests = nmtests + 1
-        call set_qa_bit(qa_bits,18) 
+        call set_qa_bit(qa_bits,18)
         if (r24_25 .le. dfthrsh) then
+          nmtests = nmtests + 1
           nptests = nptests + 1
+          ngtests(2) = ngtests(2) + 1
         else
           call check_bits(testbits,18,rtn)
           if (rtn .eq. 1) then
@@ -447,7 +448,6 @@
         hicut = dfthrsh - 1.25
         call conf_test(r24_25,locut,hicut,1.0,dfthrsh,1,c6)
         cmin2 = min(cmin2,c6)
-        ngtests(2) = ngtests(2) + 1
       endif
 
 !-------------------------------------------------------------------
@@ -466,20 +466,20 @@
         if (nint(r24) .ne. nint(bad_data) .and.  &
             nint(r21) .ne. nint(bad_data)) then
 
-          nmtests = nmtests + 1
-          call set_qa_bit(qa_bits,19) 
+          call set_qa_bit(qa_bits,19)
           r24_21 = r24 - r21
 
           if (r24_21 .ge. do11_4lo(2)) then
+            nmtests = nmtests + 1
             call set_bit(testbits,19)
             nptests = nptests + 1
+            ngtests(2) = ngtests(2) + 1
           end if
 
           call conf_test(r24_21,do11_4lo(1),do11_4lo(3),do11_4lo(4),  &
                          do11_4lo(2),1,c7)
 
           cmin2 = min(cmin2,c7)
-          ngtests(2) = ngtests(2) + 1
 
         endif
 
@@ -512,16 +512,16 @@
             power = doref2(4)
           end if
 
-          nmtests = nmtests + 1
-          call set_qa_bit(qa_bits,20) 
+          call set_qa_bit(qa_bits,20)
           if (r04.le.midpt) then
+            nmtests = nmtests + 1
             call set_bit(testbits,20)
             nptests = nptests + 1
+            ngtests(3) = ngtests(3) + 1
           end if
           call conf_test(r04,locut,hicut,power, &
                          midpt,1,c8)
           cmin3 = min(cmin3,c8)
-          ngtests(3) = ngtests(3) + 1
         endif
 
 !-------------------------------------------------------------------
@@ -536,7 +536,7 @@
 
       end if
 
-!     Visible channel ratio test 
+!     Visible channel ratio test
 
       if (visusd) then
         if (nint(r03) .ne. nint(bad_data) .and. &
@@ -559,16 +559,16 @@
             midpta(2) = dovrathi(2)
           end if
 
-          nmtests = nmtests + 1
-          call set_qa_bit(qa_bits,21) 
+          call set_qa_bit(qa_bits,21)
           vrat = r04 / r03
           if (vrat .lt. midpta(1) .or. vrat .gt. midpta(2)) then
+            nmtests = nmtests + 1
             call set_bit(testbits,21)
             nptests = nptests + 1
+            ngtests(3) = ngtests(3) + 1
           end if
           call conf_test_2val(vrat,locuta,hicuta,1.0,midpta,2,c9)
           cmin3 = min(cmin3,c9)
-          ngtests(3) = ngtests(3) + 1
         endif
 
 !-------------------------------------------------------------------
@@ -589,16 +589,16 @@
 
       if (visusd) then
         if (nint(r19) .ne. nint(bad_data)) then
-          nmtests = nmtests + 1
-          call set_qa_bit(qa_bits,16) 
+          call set_qa_bit(qa_bits,16)
           if (r19 .le. doref3(2)) then
+            nmtests = nmtests + 1
             call set_bit(testbits,16)
             nptests = nptests + 1
+            ngtests(4) = ngtests(4) + 1
           end if
           call conf_test(r19,doref3(1),doref3(3),doref3(4),  &
                          doref3(2),1,c11)
           cmin4 = min(cmin4,c11)
-          ngtests(4) = ngtests(4) + 1
         endif
 
 !-------------------------------------------------------------------
@@ -638,21 +638,27 @@
  
 !-------------------------------------------------------------------
 
-!     Determine initial confidence based on group values.
-      pre_confdnc = cmin1 * cmin2 * cmin3 * cmin4
-      
-!     Find the number of test groups used for current pixel.
+!     Determine intermediate confidence based on group values
+
+!     Next, make sure you have all groups covered
       groups = 0
-      do kk = 1,5
+      pre_confdnc = 1.0
+      do kk = 1,4
         if(ngtests(kk) .gt. 0) then
           groups = groups + 1.0
+          if (kk .eq. 1) pre_confdnc = pre_confdnc * max(cmin1, 0.1)
+          if (kk .eq. 2) pre_confdnc = pre_confdnc * max(cmin2, 0.1)
+          if (kk .eq. 3) pre_confdnc = pre_confdnc * max(cmin3, 0.1)
+          if (kk .eq. 4) pre_confdnc = pre_confdnc * max(cmin4, 0.1)
         end if
       enddo
-      fac = 1.0
-      if (groups .gt. 0) fac = 1.0 / groups
-
-!     Final pixel confidence is nth root of group confidence product.
-      confdnc = pre_confdnc**fac
+      if (groups .gt. 0) then
+        fac = 1.0 / groups
+!       Find final pixel confidence as nth root of group tests
+        confdnc = pre_confdnc**fac
+      else
+        confdnc = 1.0
+      end if
       !confdnc = cmin4
 !-------------------------------------------------------------------
 

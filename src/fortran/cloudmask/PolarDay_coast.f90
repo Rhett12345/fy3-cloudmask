@@ -380,7 +380,7 @@
       endif
 
 !     Determine intermediate confidence based on group values
-      pre_confdnc = cmin1 * cmin2 * cmin3 * cmin4
+      pre_confdnc = max(cmin1, 0.1) * max(cmin2, 0.1) * max(cmin3, 0.1) * max(cmin4, 0.1)
 
 !     Next, make sure you have all groups covered
       groups = 0

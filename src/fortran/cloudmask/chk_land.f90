@@ -114,9 +114,10 @@
           if(m31 .gt. hds11(1)) then
 
 !           Assign confidence level based on 11 micron Tbb.
+!           Cap at 0.97 to match Python chk_land_restoral behavior.
             if(m31 .gt. hds11(3)) then
-!             Assign pixel to confident clear, set bit #26.
-              confdnc = 1.0
+!             Assign pixel to probably clear (capped), set bit #26.
+              confdnc = 0.97
               call set_bit(testbits,26)
             else if(m31 .gt. hds11(2)) then
 !             Assign pixel to probably clear, set bit #26.

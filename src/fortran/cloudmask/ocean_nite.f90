@@ -503,7 +503,7 @@
 !     Determine final confidence based on group values
 !cmin2 = 1.
 !cmin1 = 1.
-      pre_confdnc = cmin1 * cmin2 
+      pre_confdnc = max(cmin1, 0.1) * max(cmin2, 0.1) 
       groups = 0.0
       do kk = 1,2
         if(ngtests(kk) .gt. 0) then
