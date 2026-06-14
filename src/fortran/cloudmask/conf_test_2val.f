@@ -51,6 +51,7 @@ c     local scalars
       real range,coeff,s1,c,alpha1,alpha2,
      *     beta1,beta2,gamma1,gamma2
 
+      c = 0.0
       coeff = 2.0 ** (power - 1.0)
 
 c     Check if testing a single threshold or a range of values.
@@ -83,25 +84,41 @@ c           Check for value beyond function range.
 c              Value is within range of lower set of limits.
                if(val .ge. beta1) then
                   range = 2.0 * (beta1 - alpha1)
-                  s1 = (val - alpha1) / range
-                  c = coeff * s1**power
+                  if(abs(range) .lt. 1.0e-12) then
+                     c = 0.5
+                  else
+                     s1 = (val - alpha1) / range
+                     c = coeff * s1**power
+                  end if
                else
                   range = 2.0 * (beta1 - gamma1)
-                  s1 = abs(val - gamma1) / range
-                  c = 1.0 - (coeff * s1**power)
+                  if(abs(range) .lt. 1.0e-12) then
+                     c = 0.5
+                  else
+                     s1 = abs(val - gamma1) / range
+                     c = 1.0 - (coeff * s1**power)
+                  end if
                end if
 
-            else 
+            else
 
 c              Value is within range of upper set of limits.
                if(val .le. beta2) then
                   range = 2.0 * (beta2 - alpha2)
-                  s1 = (val - alpha2) / range
-                  c = coeff * s1**power
+                  if(abs(range) .lt. 1.0e-12) then
+                     c = 0.5
+                  else
+                     s1 = (val - alpha2) / range
+                     c = coeff * s1**power
+                  end if
                else
                   range = 2.0 * (beta2 - gamma2)
-                  s1 = (val - gamma2) / range
-                  c = 1.0 - (coeff * s1**power)
+                  if(abs(range) .lt. 1.0e-12) then
+                     c = 0.5
+                  else
+                     s1 = (val - gamma2) / range
+                     c = 1.0 - (coeff * s1**power)
+                  end if
                end if
 
             end if
@@ -123,25 +140,41 @@ c           Check for value beyond function range.
 c              Value is within range of lower set of limits.
                   if(val .le. beta1) then
                   range = 2.0 * (beta1 - alpha1)
-                  s1 = (val - alpha1) / range
-                  c = coeff * s1**power
+                  if(abs(range) .lt. 1.0e-12) then
+                     c = 0.5
+                  else
+                     s1 = (val - alpha1) / range
+                     c = coeff * s1**power
+                  end if
                else
                   range = abs(2.0 * (beta1 - gamma1))
-                  s1 = abs((val - gamma1) / range)
-                  c = 1.0 - (coeff * s1**power)
+                  if(abs(range) .lt. 1.0e-12) then
+                     c = 0.5
+                  else
+                     s1 = abs((val - gamma1) / range)
+                     c = 1.0 - (coeff * s1**power)
+                  end if
                end if
 
-            else 
+            else
 
 c              Value is within range of upper set of limits.
                if(val .ge. beta2) then
                   range = 2.0 * (beta2 - alpha2)
-                  s1 = (val - alpha2) / range
-                  c = coeff * s1**power
+                  if(abs(range) .lt. 1.0e-12) then
+                     c = 0.5
+                  else
+                     s1 = (val - alpha2) / range
+                     c = coeff * s1**power
+                  end if
                else
                   range = 2.0 * (beta2 - gamma2)
-                  s1 = (val - gamma2) / range
-                  c = 1.0 - (coeff * s1**power)
+                  if(abs(range) .lt. 1.0e-12) then
+                     c = 0.5
+                  else
+                     s1 = (val - gamma2) / range
+                     c = 1.0 - (coeff * s1**power)
+                  end if
                end if
     
             end if
@@ -152,7 +185,9 @@ c              Value is within range of upper set of limits.
 
       end if
 
-c     Force confidence values to be between 0 and 1.              
+c     Force confidence values to be between 0 and 1.
+c     Also catch NaN (NaN .ne. NaN is true per IEEE 754).
+      if(c .ne. c) c = 0.0
       if(c .gt. 1.0) c = 1.0
       if(c .lt. 0.0) c = 0.0
 

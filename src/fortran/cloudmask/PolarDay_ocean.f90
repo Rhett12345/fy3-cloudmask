@@ -580,8 +580,10 @@
 !
 !     Determine final confidence based on group values
       pre_confdnc = cmin1 * cmin2 * cmin3 * cmin4
-      
-!      print*,'c1 c2 c3 c4',cmin1 , cmin2 , cmin3, cmin4
+
+!      if (masir11 .gt. 250.0 .and. masir11 .lt. 260.0) then
+!        print*,'DEBUG PolarDay_ocean: masir11=',masir11,' cmin=',cmin1,cmin2,cmin3,cmin4,' ngtests=',ngtests
+!      endif
       
 !     Next, make sure you have all groups covered
       groups = 0
@@ -590,9 +592,13 @@
           groups = groups + 1.0
         end if
       enddo
-      if (groups .gt. 0) fac = 1.0 / groups
-!     Find final pixel confidence as nth root of group tests
-      confdnc = pre_confdnc**fac
+      if (groups .gt. 0) then
+        fac = 1.0 / groups
+!       Find final pixel confidence as nth root of group tests
+        confdnc = pre_confdnc**fac
+      else
+        confdnc = 1.0
+      end if
 
 ! ... debug statement ............................................
 !      if (debug .gt. 0) then

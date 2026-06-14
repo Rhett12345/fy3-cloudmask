@@ -497,7 +497,11 @@
           groups = groups + 1.0
         end if
       enddo
-      if (groups .gt. 0) fac = 1.0 / groups
+      if (groups .gt. 0) then
+        fac = 1.0 / groups
+      else
+        fac = 0.0
+      end if
       confdnc = pre_confdnc**fac
 
 ! ... debug statement ............................................

@@ -49,6 +49,7 @@ c     local scalars
       real alpha,gamma,range,coeff,s1,c,beta
       logical flipped
 
+      c = 0.0
       coeff = 2.0 ** (power - 1.0)
 
 c     Check if testing a single threshold or a range of values.
@@ -85,16 +86,24 @@ c           Value is within the range of the function.
             if(val .le. beta) then
 
                range = 2.0 * (beta - alpha)
-               s1 = (val - alpha) / range
-               if(.not.flipped) c = coeff * s1**power
-               if(flipped) c = 1.0 - (coeff * s1**power)
+               if(abs(range) .lt. 1.0e-12) then
+                  c = 0.5
+               else
+                  s1 = (val - alpha) / range
+                  if(.not.flipped) c = coeff * s1**power
+                  if(flipped) c = 1.0 - (coeff * s1**power)
+               end if
 
             else
 
                range = 2.0 * (beta - gamma)
-               s1 = (val - gamma) / range
-               if(.not.flipped) c = 1.0 - (coeff * s1**power)
-               if(flipped) c = coeff * s1**power
+               if(abs(range) .lt. 1.0e-12) then
+                  c = 0.5
+               else
+                  s1 = (val - gamma) / range
+                  if(.not.flipped) c = 1.0 - (coeff * s1**power)
+                  if(flipped) c = coeff * s1**power
+               end if
 
             end if
 
@@ -102,7 +111,9 @@ c           Value is within the range of the function.
 
       end if
 
-c     Force confidence values to be between 0 and 1.              
+c     Force confidence values to be between 0 and 1.
+c     Also catch NaN (NaN .ne. NaN is true per IEEE 754).
+      if(c .ne. c) c = 0.0
       if(c .gt. 1.0) c = 1.0
       if(c .lt. 0.0) c = 0.0
 

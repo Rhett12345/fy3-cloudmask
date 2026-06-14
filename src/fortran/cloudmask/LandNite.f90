@@ -558,9 +558,13 @@
           groups = groups + 1.0
         end if
       enddo
-      if (groups .gt. 0) fac = 1.0 / groups
-!     Find final pixel confidence as nth root of group tests
-      confdnc = pre_confdnc**fac
+      if (groups .gt. 0) then
+        fac = 1.0 / groups
+!       Find final pixel confidence as nth root of group tests
+        confdnc = pre_confdnc**fac
+      else
+        confdnc = 1.0
+      end if
 
 
 ! ... debug statement ............................................
