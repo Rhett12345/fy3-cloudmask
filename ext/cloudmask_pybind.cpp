@@ -103,6 +103,7 @@ py::dict process_swath_py(
     py::array_t<float, py::array::c_style | py::array::forcecast> tpw,
     py::array_t<float, py::array::c_style | py::array::forcecast> elev,
     py::array_t<int8_t, py::array::c_style | py::array::forcecast> eco,
+    py::array_t<int8_t, py::array::c_style | py::array::forcecast> lsf,
     py::array_t<int8_t, py::array::c_style | py::array::forcecast> snow_mask,
     py::array_t<float, py::array::c_style | py::array::forcecast> btclr,
     int nElem, int nLine,
@@ -143,6 +144,7 @@ py::dict process_swath_py(
     auto elev_f    = transpose_2d<float>(elev,    nElem, nLine);
 
     auto eco_f       = transpose_2d<int8_t>(eco,       nElem, nLine);
+    auto lsf_f       = transpose_2d<int8_t>(lsf,       nElem, nLine);
     auto snow_mask_f = transpose_2d<int8_t>(snow_mask, nElem, nLine);
 
     // --- Call the Fortran engine via C++ wrapper ---
@@ -162,6 +164,7 @@ py::dict process_swath_py(
         tpw_f.data(),
         elev_f.data(),
         eco_f.data(),
+        lsf_f.data(),
         snow_mask_f.data(),
         btclr_f.data(),
         nElem, nLine
@@ -229,6 +232,7 @@ PYBIND11_MODULE(_cloudmask_native, m) {
         py::arg("tpw"),
         py::arg("elev"),
         py::arg("eco"),
+        py::arg("lsf"),
         py::arg("snow_mask"),
         py::arg("btclr"),
         py::arg("nElem"),
@@ -257,6 +261,8 @@ PYBIND11_MODULE(_cloudmask_native, m) {
                 Elevation (m).
             eco : ndarray, shape (nElem, nLine), int8
                 IGBP ecosystem type.
+            lsf : ndarray, shape (nElem, nLine), int8
+                Land-sea flag (0=water, 1=land, 2=coast, 3=shallow_lake, 4=land).
             snow_mask : ndarray, shape (nElem, nLine), int8
                 NISE snow/ice mask.
             btclr : ndarray, shape (nElem, nLine, 7), float32

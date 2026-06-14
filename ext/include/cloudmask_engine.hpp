@@ -83,6 +83,7 @@ extern "C" {
         float tpw_in,
         float pelev_in,
         int8_t eco_in,
+        int8_t lsf_in,
         int8_t snow_mask_in,
         const float* btclr_in,            // [7] clear-sky BT
         const float* indat_in,            // [3x3x25] context
@@ -117,6 +118,7 @@ extern "C" {
         const float* tpw_arr,
         const float* elev_arr,
         const int8_t* eco_arr,
+        const int8_t* lsf_arr,
         const int8_t* snow_mask_arr,
         const float* btclr_arr,           // [nElem * nLine * 7]
         int nElem, int nLine,
@@ -155,6 +157,7 @@ public:
      * @param tpw        Total precipitable water [nElem * nLine], float32
      * @param elev       Elevation [nElem * nLine], float32
      * @param eco        Ecosystem type [nElem * nLine], int8
+     * @param lsf        Land-sea flag [nElem * nLine], int8 (0=water, 1=land, 2=coast)
      * @param snow_mask  Snow/ice mask [nElem * nLine], int8
      * @param btclr      Clear-sky BT [nElem * nLine * 7], float32
      * @param nElem      Number of elements (columns)
@@ -177,6 +180,7 @@ public:
         const float* tpw,
         const float* elev,
         const int8_t* eco,
+        const int8_t* lsf,
         const int8_t* snow_mask,
         const float* btclr,
         int nElem,
@@ -188,7 +192,7 @@ public:
             ref_vis, tbb_ir,
             lat, lon, satzen, solzen, relaz, glint,
             sfctmp, pmsl, uwind, vwind, tpw,
-            elev, eco, snow_mask, btclr,
+            elev, eco, lsf, snow_mask, btclr,
             nElem, nLine,
             result.cm_bitarray.data(),
             result.qa_bitarray.data(),

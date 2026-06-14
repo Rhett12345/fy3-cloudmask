@@ -138,6 +138,7 @@ def read_geo_data(geo_path: str) -> dict:
         lon = f['Geolocation/Longitude'][:].astype(np.float64)
         dem = f['Geolocation/DEM'][:].astype(np.float64)
         eco = f['Geolocation/LandCover'][:].astype(np.int32)
+        lsf_raw = f['Geolocation/LandSeaMask'][:].astype(np.int8)
         sza_raw = f['Geolocation/SolarZenith'][:].astype(np.float64)
         vza_raw = f['Geolocation/SensorZenith'][:].astype(np.float64)
         saa_raw = f['Geolocation/SolarAzimuth'][:].astype(np.float64)
@@ -154,7 +155,7 @@ def read_geo_data(geo_path: str) -> dict:
     return {
         'lat': lat.T, 'lon': lon.T, 'elevation': dem.T,
         'eco_type': eco.T, 'sza': sza.T, 'vza': vza.T,
-        'glint_angle': glint_angle.T,
+        'glint_angle': glint_angle.T, 'lsf': lsf_raw.T,
     }
 
 
@@ -296,6 +297,7 @@ def run_single_orbit(
         sfctmp=sfctmp, pmsl=pmsl, uwind=uwind, vwind=vwind, tpw=tpw,
         elev=np.ascontiguousarray(geo['elevation'].astype(np.float32)),
         eco=np.ascontiguousarray(geo['eco_type'].astype(np.int8)),
+        lsf=np.ascontiguousarray(geo['lsf'].astype(np.int8)),
         snow_mask=np.ascontiguousarray(np.zeros((n_elem, n_line), dtype=np.int8)),
         btclr=np.ascontiguousarray(np.zeros((n_elem, n_line, 7), dtype=np.float32)),
         n_elem=n_elem, n_line=n_line,

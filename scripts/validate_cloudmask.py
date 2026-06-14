@@ -217,6 +217,7 @@ def main():
         tpw=np.ascontiguousarray(nwp_interp['tpw'].astype(np.float32)),
         elev=np.ascontiguousarray(geo['elevation'].astype(np.float32)),
         eco=np.ascontiguousarray(geo['eco_type'].astype(np.int8)),
+        lsf=np.ascontiguousarray(geo['lsf'].astype(np.int8)),
         snow_mask=np.ascontiguousarray(np.zeros((n_elem, n_line), dtype=np.int8)),
         btclr=np.ascontiguousarray(np.zeros((n_elem, n_line, 7), dtype=np.float32)),
         n_elem=n_elem, n_line=n_line,

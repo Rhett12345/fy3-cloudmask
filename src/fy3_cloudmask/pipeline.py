@@ -251,12 +251,13 @@ class CloudMaskPipeline:
         # Ancillary arrays
         elev = sat_data['elevation'].astype(np.float32)
         eco = sat_data['eco_type'].astype(np.int8)
+        lsf = sat_data['lsf'].astype(np.int8)
         snow_mask = sat_data['snow_mask'].astype(np.int8)
 
         # Call native engine
         return process_swath_native(
             ref_vis, tbb_ir, lat, lon, satzen, solzen, relaz, glint,
-            sfctmp, pmsl, uwind, vwind, tpw, elev, eco, snow_mask, btclr,
+            sfctmp, pmsl, uwind, vwind, tpw, elev, eco, lsf, snow_mask, btclr,
             n_elem, n_line
         )
 

@@ -74,6 +74,7 @@ def process_swath_native(
     tpw: np.ndarray,          # (nElem, nLine) float32
     elev: np.ndarray,         # (nElem, nLine) float32
     eco: np.ndarray,          # (nElem, nLine) int8
+    lsf: np.ndarray,          # (nElem, nLine) int8
     snow_mask: np.ndarray,    # (nElem, nLine) int8
     btclr: np.ndarray,        # (nElem, nLine, 7) float32
     n_elem: int,
@@ -101,6 +102,8 @@ def process_swath_native(
         Elevation (m).
     eco : ndarray, shape (nElem, nLine), int8
         IGBP ecosystem type.
+    lsf : ndarray, shape (nElem, nLine), int8
+        Land-sea flag (0=water, 1=land, 2=coast, 3=shallow_lake, 4=land).
     snow_mask : ndarray, shape (nElem, nLine), int8
         NISE snow/ice mask.
     btclr : ndarray, shape (nElem, nLine, 7), float32
@@ -138,6 +141,7 @@ def process_swath_native(
     tpw = np.ascontiguousarray(tpw, dtype=np.float32)
     elev = np.ascontiguousarray(elev, dtype=np.float32)
     eco = np.ascontiguousarray(eco, dtype=np.int8)
+    lsf = np.ascontiguousarray(lsf, dtype=np.int8)
     snow_mask = np.ascontiguousarray(snow_mask, dtype=np.int8)
     btclr = np.ascontiguousarray(btclr, dtype=np.float32)
 
@@ -153,6 +157,6 @@ def process_swath_native(
     # Call native engine
     return _cloudmask_native.process_swath(
         ref_vis, tbb_ir, lat, lon, satzen, solzen, relaz, glint,
-        sfctmp, pmsl, uwind, vwind, tpw, elev, eco, snow_mask, btclr,
+        sfctmp, pmsl, uwind, vwind, tpw, elev, eco, lsf, snow_mask, btclr,
         n_elem, n_line, code_root
     )

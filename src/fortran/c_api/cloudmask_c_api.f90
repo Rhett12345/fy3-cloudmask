@@ -60,7 +60,7 @@ contains
         tpw_in,                     &
         ! --- Input: ancillary ---
         pelev_in, eco_in,           &
-        snow_mask_in,               &
+        lsf_in, snow_mask_in,       &
         ! --- Input: clear-sky BT from RTM ---
         btclr_in,                   &
         ! --- Input: 3x3 context (3x3x25) ---
@@ -85,6 +85,7 @@ contains
         real(c_float), value, intent(in) :: tpw_in
         real(c_float), value, intent(in) :: pelev_in
         integer(c_signed_char), value, intent(in) :: eco_in
+        integer(c_signed_char), value, intent(in) :: lsf_in
         integer(c_signed_char), value, intent(in) :: snow_mask_in
         real(c_float), intent(in)    :: btclr_in(7)
         real(c_float), intent(in)    :: indat_in(necntx, nlcntx, inband)
@@ -145,12 +146,8 @@ contains
                 nbands = nbands + 1
         end do
 
-        ! Set LSF from ecosystem type (simplified heuristic)
-        ! In the original code, LSF comes from ancillary data.
-        ! Here we derive a reasonable default from ecosystem type.
-        lsf = 1  ! default: land
-        if (eco_in == 0) lsf = 0  ! water
-        if (eco_in == 14) lsf = 2  ! coast
+        ! Use actual LSF from GEO data (passed from Python)
+        lsf = lsf_in
 
         ! Compute processing flags from input data
         call compute_pixel_flags(pxldat_local, pelev_in, eco_in, &
@@ -272,7 +269,7 @@ contains
         uwind_arr, vwind_arr,      &  ! NWP wind
         tpw_arr,                   &  ! NWP TPW
         elev_arr, eco_arr,         &  ! Ancillary
-        snow_mask_arr,             &  ! Snow/ice mask
+        lsf_arr, snow_mask_arr,    &  ! Land-sea flag + Snow/ice mask
         btclr_arr,                 &  ! Clear-sky BT from RTM (nElem x nLine x 7)
         ! --- Dimensions ---
         nElem, nLine,              &
@@ -304,6 +301,7 @@ contains
         real(c_float), intent(in)     :: tpw_arr(nElem, nLine)
         real(c_float), intent(in)     :: elev_arr(nElem, nLine)
         integer(c_signed_char), intent(in) :: eco_arr(nElem, nLine)
+        integer(c_signed_char), intent(in) :: lsf_arr(nElem, nLine)
         integer(c_signed_char), intent(in) :: snow_mask_arr(nElem, nLine)
         real(c_float), intent(in)     :: btclr_arr(nElem, nLine, 7)
 
@@ -361,19 +359,8 @@ contains
         ! Allocate geo%lsm used by check_reg_uniformity
         if (associated(geo%lsm)) deallocate(geo%lsm)
         allocate(geo%lsm(nElem, nLine))
-        ! Derive land-sea mask from eco type (simplified mapping)
-        do iline = 1, nLine
-            do ielem = 1, nElem
-                select case (int(eco_arr(ielem, iline)))
-                    case (0)
-                        geo%lsm(ielem, iline) = 0  ! water
-                    case (14)
-                        geo%lsm(ielem, iline) = 2  ! coast
-                    case default
-                        geo%lsm(ielem, iline) = 1  ! land
-                end select
-            end do
-        end do
+        ! Use actual LSF from GEO data
+        geo%lsm = lsf_arr
 
         ! Initialize output arrays
         out_cm_bitarray  = 0
@@ -464,6 +451,7 @@ contains
                     tpw_arr(ielem, iline),      &
                     elev_arr(ielem, iline),     &
                     eco_arr(ielem, iline),      &
+                    lsf_arr(ielem, iline),      &
                     snow_mask_arr(ielem, iline), &
                     btclr_local,                &
                     indat_local,                &
