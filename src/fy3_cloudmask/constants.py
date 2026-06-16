@@ -98,7 +98,9 @@ HIGH_ELEVATION = 2000.0    # High elevation threshold (m)
 GREENLAND_ELEVATION = 200.0  # Greenland elevation threshold (m)
 
 # Desert ecosystem types (IGBP classification)
-DESERT_ECOSYSTEM_TYPES = [8, 46, 50, 51, 59, 71, 11, 9, 52]
+# Fortran: if (eco_int >= 7 .and. eco_int <= 10) desert = .true.
+#          if (eco_int == 16) desert = .true.
+DESERT_ECOSYSTEM_TYPES = [7, 8, 9, 10, 16]
 
 # Ecosystem types where VRAT is disabled
 VRAT_DISABLED_ECOSYSTEMS = [2, 8, 11, 40, 41, 46, 51, 52, 59, 71, 50]

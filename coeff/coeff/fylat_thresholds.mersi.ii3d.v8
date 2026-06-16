@@ -27,6 +27,22 @@ ldsref3 : 0.22, 0.18, 0.14, 1
 ldstci : 0.035, 0.0125
 !
 ! Daytime polar desert thresholds
+pds11_12hi : 3.5, 3, 2.5, 1
+pds11_4hi : -3, -5, -7, 1
+pds11_4lo : -25, -23, -21, 1
+pdsh20 : 215, 220, 225, 1
+pdsref2 : 0.42, 0.39, 0.36, 1
+pdsref3 : 0.22, 0.18, 0.14, 1
+pdstci : 0.035, 0.0125
+!
+! Daytime polar coastal desert thresholds
+pds11_12hi_c : 3.5, 3, 2.5, 1
+pds11_4hi_c : 2, 0, -2, 1
+pds11_4lo_c : -20, -18, -16, 1
+pdsh20_c : 215, 220, 225, 1
+pdsref2_c : 0.34, 0.3, 0.26, 1
+pdsref3_c : 0.22, 0.18, 0.14, 1
+pdstci_c : 0.035, 0.0125
 !
 ! Daytime land thresholds
 dl11_12hi : 3

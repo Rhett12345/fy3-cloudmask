@@ -410,11 +410,14 @@ def polar_day_ocean(
 
     Port of PolarDay_ocean.f90.
     """
-    # Similar to ocean_day but with polar-specific thresholds
+    # Use polar-specific thresholds (ocean_day_polar) instead of standard ocean_day
     from .ocean_day import ocean_day
+    polar_thresholds = dict(thresholds)
+    if 'ocean_day_polar' in thresholds:
+        polar_thresholds['ocean_day'] = thresholds['ocean_day_polar']
     return ocean_day(
         pxldat, vza, snglnt, visusd, cirrus_vis, sfctmp, refang, sh_ocean,
-        bt_clr, thresholds, testbits, qa_bits,
+        bt_clr, polar_thresholds, testbits, qa_bits,
     )
 
 

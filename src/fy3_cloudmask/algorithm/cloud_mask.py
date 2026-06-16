@@ -203,8 +203,8 @@ def run_cloud_mask_pixel(
             result.testbits, result.qa_bits,
         )
 
-    # Spatial variability check
-    if indat_3x3_11um is not None and flags.water:
+    # Spatial variability check (Fortran: .not. land, not just water)
+    if indat_3x3_11um is not None and not flags.land:
         confdnc = chk_spatial_var(
             confdnc, indat_3x3_11um, flags.uniform, False, thresholds,
             result.testbits, result.qa_bits,

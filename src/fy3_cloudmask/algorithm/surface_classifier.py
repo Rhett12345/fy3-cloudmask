@@ -180,22 +180,8 @@ def classify_pixel_surface(
         if elevation > GREENLAND_ELEVATION:
             flags.hi_elev = True
 
-    # Desert classification
+    # Desert classification (matches Fortran: eco 7-10 and 16)
     flags.desert = is_desert_ecosystem(eco_type)
-    # Additional regional desert rules
-    if not flags.desert:
-        # Africa
-        if lat > -35.0 and lat < 37.0 and lon > -20.0 and lon < 55.0:
-            if eco_type == 42 and elevation > 1000.0:
-                flags.desert = True
-        # Eurasia
-        elif lat > 15.0 and lat < 55.0 and lon > 40.0 and lon < 140.0:
-            if eco_type == 42 and elevation > 1000.0:
-                flags.desert = True
-        # Australia
-        elif lat > -40.0 and lat < -10.0 and lon > 112.0 and lon < 155.0:
-            if eco_type == 42:
-                flags.desert = True
 
     # VRAT disabled for certain ecosystems
     flags.vrused = not is_vrat_disabled(eco_type)
@@ -213,10 +199,7 @@ def classify_pixel_surface(
     elif lsf == 3:
         flags.land = True
         flags.sh_lake = True
-        if flags.day:
-            flags.coast = True
-        else:
-            flags.coast = False
+        flags.coast = False
         flags.water = False
     elif lsf == 0:
         flags.water = True

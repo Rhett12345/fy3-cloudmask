@@ -334,22 +334,77 @@ def _conf_test_2val(
     power: float,
     midpt: list[float],
 ) -> float:
-    """Two-value confidence test for ratio tests.
+    """Two-value range-based confidence test.
 
-    Used when clear-sky values fall between two thresholds.
+    Port of Fortran conf_test_2val.f. Implements a range-based S-curve
+    where two threshold sets define an inner region and outer region.
 
     Args:
         val: Test value.
-        locut: Two-element list of low cutoffs.
-        hicut: Two-element list of high cutoffs.
+        locut: Two-element list of low confidence cutoffs (alpha1, alpha2).
+        hicut: Two-element list of high confidence cutoffs (gamma1, gamma2).
         power: S-curve power.
-        midpt: Two-element list of midpoints.
+        midpt: Two-element list of midpoints (beta1, beta2).
 
     Returns:
         Confidence value in [0.0, 1.0].
     """
-    # For ratio tests, we have two ranges: below midpt[0] and above midpt[1]
-    # Compute confidence for each range and take the maximum
-    c1 = conf_test_thresholds(val, np.array([locut[0], midpt[0], hicut[0], power], dtype=np.float64))
-    c2 = conf_test_thresholds(val, np.array([locut[1], midpt[1], hicut[1], power], dtype=np.float64))
-    return max(c1, c2)
+    alpha1, alpha2 = locut[0], locut[1]
+    gamma1, gamma2 = hicut[0], hicut[1]
+    beta1, beta2 = midpt[0], midpt[1]
+    coeff = 2.0 ** (power - 1.0)
+
+    if (alpha1 - gamma1) > 0.0:
+        # Inner region fails test
+        if alpha1 < val < alpha2:
+            c = 0.0
+        elif val < gamma1 or val > gamma2:
+            c = 1.0
+        elif val <= alpha1:
+            # Lower range
+            if val >= beta1:
+                rng = 2.0 * (beta1 - alpha1)
+                s1 = (val - alpha1) / rng if abs(rng) > 1e-12 else 0.0
+                c = coeff * s1 ** power
+            else:
+                rng = 2.0 * (beta1 - gamma1)
+                s1 = abs(val - gamma1) / rng if abs(rng) > 1e-12 else 0.0
+                c = 1.0 - (coeff * s1 ** power)
+        else:
+            # Upper range
+            if val <= beta2:
+                rng = 2.0 * (beta2 - alpha2)
+                s1 = (val - alpha2) / rng if abs(rng) > 1e-12 else 0.0
+                c = coeff * s1 ** power
+            else:
+                rng = 2.0 * (beta2 - gamma2)
+                s1 = (val - gamma2) / rng if abs(rng) > 1e-12 else 0.0
+                c = 1.0 - (coeff * s1 ** power)
+    else:
+        # Inner region passes test
+        if gamma1 < val < gamma2:
+            c = 1.0
+        elif val < alpha1 or val > alpha2:
+            c = 0.0
+        elif val <= gamma1:
+            # Lower range
+            if val <= beta1:
+                rng = 2.0 * (beta1 - alpha1)
+                s1 = (val - alpha1) / rng if abs(rng) > 1e-12 else 0.0
+                c = coeff * s1 ** power
+            else:
+                rng = abs(2.0 * (beta1 - gamma1))
+                s1 = abs((val - gamma1) / rng) if abs(rng) > 1e-12 else 0.0
+                c = 1.0 - (coeff * s1 ** power)
+        else:
+            # Upper range
+            if val >= beta2:
+                rng = 2.0 * (beta2 - alpha2)
+                s1 = (val - alpha2) / rng if abs(rng) > 1e-12 else 0.0
+                c = coeff * s1 ** power
+            else:
+                rng = 2.0 * (beta2 - gamma2)
+                s1 = (val - gamma2) / rng if abs(rng) > 1e-12 else 0.0
+                c = 1.0 - (coeff * s1 ** power)
+
+    return max(0.0, min(1.0, c))
