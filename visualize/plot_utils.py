@@ -19,6 +19,18 @@ v2 changes (bug-fix pass)
   cannot be downloaded; without this wrapper cartopy raises during
   rendering and panels silently lose their land/ocean fill.
 
+v2.1 — pcolormesh rendering
+----------------------------
+- plot_clm / plot_diff switched from layered scatter to single-pass
+  pcolormesh(shading='nearest').  Invalid pixels are set to NaN
+  (preserving 2-D grid structure) instead of being filtered out into
+  1-D flat arrays.  This eliminates class-layering artefacts where
+  cloudy classes (drawn last) would paint over clear classes, and
+  guarantees every grid cell gets exactly one unambiguous colour.
+- plot_rgb / plot_rgb_placeholder kept as scatter — single-pass
+  rendering without class layering, where marker overlap is negligible
+  at typical step=4 subsampling.
+
 Exports
 -------
 apply_nature_style()
@@ -198,9 +210,9 @@ def make_geo_ax(fig: plt.Figure, spec) -> plt.Axes:
     ax.add_feature(_safe(cfeature.LAND),      facecolor=LAND_COLOR,  zorder=1)
     ax.add_feature(_safe(cfeature.LAKES),     facecolor=LAKE_COLOR,  zorder=1)
     ax.add_feature(_safe(cfeature.COASTLINE), linewidth=0.5,
-                   edgecolor=COAST_COLOR, zorder=4)
+                   edgecolor=COAST_COLOR, facecolor="none", zorder=4)
     ax.add_feature(_safe(cfeature.BORDERS),   linewidth=0.3,
-                   edgecolor=BORDER_COLOR, linestyle="--", zorder=4)
+                   edgecolor=BORDER_COLOR, facecolor="none", linestyle="--", zorder=4)
     return ax
 
 
@@ -238,9 +250,9 @@ def make_geo_ax_with_caption(
     ax.add_feature(_safe(cfeature.LAND),      facecolor=LAND_COLOR,  zorder=1)
     ax.add_feature(_safe(cfeature.LAKES),     facecolor=LAKE_COLOR,  zorder=1)
     ax.add_feature(_safe(cfeature.COASTLINE), linewidth=0.5,
-                   edgecolor=COAST_COLOR, zorder=4)
+                   edgecolor=COAST_COLOR, facecolor="none", zorder=4)
     ax.add_feature(_safe(cfeature.BORDERS),   linewidth=0.3,
-                   edgecolor=BORDER_COLOR, linestyle="--", zorder=4)
+                   edgecolor=BORDER_COLOR, facecolor="none", linestyle="--", zorder=4)
     return ax
 
 
@@ -394,22 +406,23 @@ def plot_clm(
     step: int = 4,
 ) -> None:
     """
-    Scatter CLM-coloured pixels.
-    Draw order: clear classes first (background) → cloudy on top.
+    Render CLM via pcolormesh — one-shot, no class-layering artefacts.
+
+    Keeps the 2-D grid intact (invalid pixels → NaN) so pcolormesh
+    can assign every cell a unique colour without any "later class
+    paints over earlier class" scatter-ordering problem.
     """
     la = subsample(lat, step)
     lo = subsample(lon, step)
     cl = subsample(clm, step)
     mask = np.isfinite(la) & np.isfinite(lo) & (cl >= 0)
-    la, lo, cl = la[mask], lo[mask], cl[mask]
-
-    for v in [2, 3, 1, 0]:      # clear first, cloudy on top
-        m = cl == v
-        if not m.any():
-            continue
-        ax.scatter(lo[m], la[m], c=CLM_HEX[v], s=1.2, linewidths=0,
-                   transform=ccrs.PlateCarree(), zorder=3,
-                   edgecolors="none", rasterized=True)
+    if not mask.any():
+        _no_data_text(ax, "No valid CLM pixels")
+        return
+    cl_masked = np.where(mask, cl.astype(np.float64), np.nan)
+    ax.pcolormesh(lo, la, cl_masked, cmap=CLM_CMAP, norm=CLM_NORM,
+                  transform=ccrs.PlateCarree(), shading="nearest",
+                  rasterized=True, zorder=3)
 
 
 def plot_diff(
@@ -422,8 +435,11 @@ def plot_diff(
     vmax: float = DELTA_VMAX,
 ):
     """
-    Scatter difference map (clm_a − clm_b) with diverging colormap.
-    Returns (ScalarMappable, mask, diff) for colorbar + stats reuse.
+    Render class difference (clm_a − clm_b) via pcolormesh.
+
+    Keeps the 2-D grid intact with NaN for invalid / non-overlapping
+    pixels so every cell gets ONE unambiguous colour.  Returns
+    (ScalarMappable, mask, diff) for colorbar + stats reuse.
     """
     la = subsample(lat, step)
     lo = subsample(lon, step)
@@ -431,15 +447,14 @@ def plot_diff(
     cb = subsample(clm_b, step)
     mask = np.isfinite(la) & np.isfinite(lo) & (ca >= 0) & (cb >= 0)
 
-    diff   = ca.astype(np.float32) - cb.astype(np.float32)
+    diff   = np.where(mask, ca.astype(np.float64) - cb.astype(np.float64), np.nan)
     d_cmap = plt.get_cmap(DELTA_CMAP)
     d_norm = mcolors.Normalize(vmin=-vmax, vmax=vmax)
 
     if mask.any():
-        colors = d_cmap(d_norm(diff[mask]))
-        ax.scatter(lo[mask], la[mask], c=colors, s=1.2, linewidths=0,
-                   transform=ccrs.PlateCarree(), zorder=3,
-                   edgecolors="none", rasterized=True)
+        ax.pcolormesh(lo, la, diff, cmap=d_cmap, norm=d_norm,
+                      transform=ccrs.PlateCarree(), shading="nearest",
+                      rasterized=True, zorder=3)
     else:
         _no_data_text(ax, "No overlap")
 
