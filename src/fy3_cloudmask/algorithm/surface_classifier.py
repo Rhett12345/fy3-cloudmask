@@ -186,7 +186,7 @@ def classify_pixel_surface(
     # VRAT disabled for certain ecosystems
     flags.vrused = not is_vrat_disabled(eco_type)
 
-    # Land/sea classification from land-sea mask
+    # Land/sea classification from land-sea mask (matches Fortran LSF logic)
     if lsf == 1 or lsf == 4:
         flags.land = True
         flags.water = False
@@ -199,15 +199,15 @@ def classify_pixel_surface(
     elif lsf == 3:
         flags.land = True
         flags.sh_lake = True
-        flags.coast = False
+        flags.coast = flags.day
         flags.water = False
     elif lsf == 0:
         flags.water = True
         flags.land = False
         flags.coast = False
         flags.sh_ocean = True
-    else:
-        # Fallback: use VRAT to determine land/water
+    elif lsf == -1:
+        # Missing LSF: use VRAT to determine land/water (Fortran fallback)
         flags.water = True
         flags.land = False
         if pxldat[BAND_064] > VIS_VALID_MIN and pxldat[BAND_086] > VIS_VALID_MIN:
@@ -216,6 +216,11 @@ def classify_pixel_surface(
                 if vrat > 0.9:
                     flags.land = True
                     flags.water = False
+    else:
+        # Unknown LSF (6, 7, etc.): treat as water without sh_ocean (matches Fortran)
+        flags.water = True
+        flags.land = False
+        flags.coast = False
 
     # New Zealand check
     flags.New_Zealand = is_new_zealand(lat, lon)
