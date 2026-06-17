@@ -1314,9 +1314,68 @@ element_loop_1: do ielem= 1, sat%nElem
 end do element_loop_1
 end do line_loop_1
 
+! Apply spatial consistency filter to remove salt-and-pepper noise
+call apply_spatial_filter()
+
 end subroutine convert_cloud_mask
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+!~~~~~~~~~~~~~~~~~~~ spatial consistency filter ~~~~~~~~~~~~~~~~~~~~~~~~
+subroutine apply_spatial_filter()
+    integer :: i, j, di, dj, center, same_count
+    integer :: counts(0:3), max_count, max_class, c
+    integer(kind=1), allocatable :: original(:,:)
+    integer :: nx, ny
+
+    nx = sat%nElem
+    ny = sat%nLine
+    allocate(original(nx, ny))
+
+    do j = 1, ny
+        do i = 1, nx
+            original(i, j) = cm_tmp(i, j, 1)
+        end do
+    end do
+
+    do j = 2, ny - 1
+        do i = 2, nx - 1
+            center = original(i, j)
+            if (center == 5) cycle
+
+            same_count = 0
+            do c = 0, 3
+                counts(c) = 0
+            end do
+
+            do dj = -1, 1
+                do di = -1, 1
+                    if (di == 0 .and. dj == 0) cycle
+                    if (original(i+di, j+dj) == center) same_count = same_count + 1
+                    c = original(i+di, j+dj)
+                    if (c >= 0 .and. c <= 3) then
+                        counts(c) = counts(c) + 1
+                    end if
+                end do
+            end do
+
+            if (same_count == 0) then
+                max_count = 0
+                max_class = center
+                do c = 0, 3
+                    if (counts(c) > max_count) then
+                        max_count = counts(c)
+                        max_class = c
+                    end if
+                end do
+                cm_tmp(i, j, 1) = int(max_class, kind=1)
+            end if
+        end do
+    end do
+
+    deallocate(original)
+end subroutine apply_spatial_filter
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 !-------------------------- END MODULE ---------------------------------
 end module fylat_fy3mersi_cloud_mask
