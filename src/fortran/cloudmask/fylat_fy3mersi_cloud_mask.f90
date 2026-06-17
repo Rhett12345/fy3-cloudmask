@@ -263,14 +263,16 @@ endif
                            cirrus_vis,desert,coast,snow,       &
                            ice,hi_elev,tbadj,eco_type,         &
                            testbits,qa_bits,nmtests,confdnc,   &
-                           btclr,is_cold_sfc)
+                           btclr,is_cold_sfc,                  &
+                           indat(1:3,1:3,24), ielem, iline)
 
          else
 !            Nighttime processing.
              call land_nite(pxldat,plat,vza,ice,snow,coast,tbadj,          &
                             desert,hi_elev,sh_lake,sfctmp,eco_type,        &
                             nmtests,testbits,qa_bits,confdnc,precip_water, &
-                            btclr,is_cold_sfc)
+                            btclr,is_cold_sfc,                             &
+                            indat(1:3,1:3,24), ielem, iline)
          endif
 
       else if (water) then

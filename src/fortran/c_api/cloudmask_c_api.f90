@@ -187,12 +187,14 @@ contains
                 call land_day(pxldat_local, vza, visusd, vrused,           &
                     cirrus_vis, desert, coast, snow, ice, hi_elev,         &
                     tbadj_local, eco_type_local, testbits, qa_bits, nmtests, &
-                    confdnc, btclr_local, is_cold_sfc)
+                    confdnc, btclr_local, is_cold_sfc,                     &
+                    indat_local(:,:,24), ielem_in, iline_in)
             else if (land .and. night) then
                 call land_nite(pxldat_local, plat, vza, ice, snow, coast,  &
                     tbadj_local, desert, hi_elev, sh_lake, sfctmp,         &
                     eco_type_local, nmtests, testbits, qa_bits, confdnc,   &
-                    precip_water, btclr_local, is_cold_sfc)
+                    precip_water, btclr_local, is_cold_sfc,                &
+                    indat_local(:,:,24), ielem_in, iline_in)
             else if (water .and. day) then
                 call water_day(pxldat_local, vza, snglnt, visusd, refang,  &
                     cirrus_vis, sfctmp, hi_elev, uniform, ice, snow,       &

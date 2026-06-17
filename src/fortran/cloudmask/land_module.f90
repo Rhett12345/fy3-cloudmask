@@ -36,7 +36,8 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 subroutine land_day(pxldat,vza,visusd,vrused,cirrus_vis,             &
                     desert,coast,snow,ice,hi_elev,tbadj,eco_type,    &
-                    testbits,qa_bits,nmtests,confdnc,btclr,is_cold_sfc)
+                    testbits,qa_bits,nmtests,confdnc,btclr,is_cold_sfc, &
+                    indat_11um, ielem, iline)
 
 !      implicit none
 !      save
@@ -90,14 +91,18 @@ subroutine land_day(pxldat,vza,visusd,vrused,cirrus_vis,             &
       integer nmtests
       logical visusd,vrused,snow,ice,desert,coast,cirrus_vis,hi_elev
       byte eco_type
+      integer ielem, iline
 
 !     array arguments
       real pxldat(inband), btclr(7)
+      real indat_11um(3,3)
       byte testbits(6),qa_bits(10)
 
 !     local scalars
       integer h_output,debug
       integer(kind=1) :: is_cold_sfc
+      real :: bt11_std, bt11_sum, bt11_mean, bt11_val
+      integer :: di, dj, bt11_n
 
 !     external subroutines
       external LandDay_desert,LandDay,Day_snow,LandDay_desert_c, &
@@ -158,7 +163,39 @@ subroutine land_day(pxldat,vza,visusd,vrused,cirrus_vis,             &
 
       if(.not. (snow .or. ice)) then
         if(confdnc .le. 0.95) then
-           call chk_land(pxldat,eco_type,desert,tbadj,confdnc,qa_bits,testbits)
+!         Check 11um BT spatial uniformity before restoral.
+!         Skip chk_land if the neighborhood is too heterogeneous
+!         (isolated clear pixels should not be restored).
+           bt11_sum = 0.0
+           bt11_n = 0
+           do dj = 1, 3
+             do di = 1, 3
+               bt11_val = indat_11um(di, dj)
+               if (abs(bt11_val - bad_data) .gt. 0.1) then
+                 bt11_sum = bt11_sum + bt11_val
+                 bt11_n = bt11_n + 1
+               end if
+             end do
+           end do
+           if (bt11_n .ge. 5) then
+             bt11_mean = bt11_sum / real(bt11_n)
+             bt11_std = 0.0
+             do dj = 1, 3
+               do di = 1, 3
+                 bt11_val = indat_11um(di, dj)
+                 if (abs(bt11_val - bad_data) .gt. 0.1) then
+                   bt11_std = bt11_std + (bt11_val - bt11_mean)**2
+                 end if
+               end do
+             end do
+             bt11_std = sqrt(bt11_std / real(bt11_n))
+!            Only restore if neighborhood is spatially uniform (< 1.5K std)
+             if (bt11_std .lt. 1.5) then
+               call chk_land(pxldat,eco_type,desert,tbadj,confdnc,qa_bits,testbits)
+             end if
+           else
+!            Not enough valid data, skip restoral
+           end if
         end if
       end if
 
@@ -166,7 +203,7 @@ subroutine land_day(pxldat,vza,visusd,vrused,cirrus_vis,             &
       if(coast .and. (.not. (snow .or. ice))) then
         call chk_coast(pxldat,confdnc,qa_bits,testbits)
       end if
-       
+
 !-----------------------------------------------------------------------
 
 !      return
@@ -177,7 +214,8 @@ end subroutine land_day
 subroutine land_nite(pxldat,plat,vza,ice,snow,coast,tbadj,desert,   &
                      hi_elev,sh_lake,sfctmp,eco_type,nmtests,       &
                      testbits,qa_bits,confdnc,ptwp,                 &
-                     btclr,is_cold_sfc)
+                     btclr,is_cold_sfc,                             &
+                     indat_11um, ielem, iline)
 
 !      implicit none
 !      save
@@ -229,15 +267,19 @@ subroutine land_nite(pxldat,plat,vza,ice,snow,coast,tbadj,desert,   &
       logical snow,ice,coast,desert,hi_elev,sh_lake
       integer nmtests
       byte eco_type
+      integer ielem, iline
 
 !     array arguments
       real pxldat(inband) , btclr(7)
+      real indat_11um(3,3)
       integer(kind=1) :: is_cold_sfc
       byte testbits(6),qa_bits(10)
 
 !     local scalars
       integer debug,h_output
       logical lnd
+      real :: bt11_std, bt11_sum, bt11_mean, bt11_val
+      integer :: di, dj, bt11_n
 
 !     external subroutines
       external LandNite,Nite_snow,chk_land_nite
@@ -283,7 +325,34 @@ subroutine land_nite(pxldat,plat,vza,ice,snow,coast,tbadj,desert,   &
 
       if( .not. (snow .or. ice)) then
         if(confdnc .le. 0.95) then
-          call chk_land_nite(pxldat,tbadj,confdnc,qa_bits,testbits)
+!         Check 11um BT spatial uniformity before restoral.
+           bt11_sum = 0.0
+           bt11_n = 0
+           do dj = 1, 3
+             do di = 1, 3
+               bt11_val = indat_11um(di, dj)
+               if (abs(bt11_val - bad_data) .gt. 0.1) then
+                 bt11_sum = bt11_sum + bt11_val
+                 bt11_n = bt11_n + 1
+               end if
+             end do
+           end do
+           if (bt11_n .ge. 5) then
+             bt11_mean = bt11_sum / real(bt11_n)
+             bt11_std = 0.0
+             do dj = 1, 3
+               do di = 1, 3
+                 bt11_val = indat_11um(di, dj)
+                 if (abs(bt11_val - bad_data) .gt. 0.1) then
+                   bt11_std = bt11_std + (bt11_val - bt11_mean)**2
+                 end if
+               end do
+             end do
+             bt11_std = sqrt(bt11_std / real(bt11_n))
+             if (bt11_std .lt. 1.5) then
+               call chk_land_nite(pxldat,tbadj,confdnc,qa_bits,testbits)
+             end if
+           end if
         end if
       end if
 
