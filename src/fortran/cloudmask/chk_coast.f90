@@ -73,7 +73,7 @@
           call set_qa_bit(qa_bits,22)
           ndvi = (pxldat(2) - pxldat(1)) / (pxldat(2) + pxldat(1))
           if(ndvi .le. swc_ndvi(1) .or. ndvi .ge. swc_ndvi(2)) then
-            confdnc = 0.97
+            confdnc = 1.0
             call set_bit(testbits,22)
           end if
 
