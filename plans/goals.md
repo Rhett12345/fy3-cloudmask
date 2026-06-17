@@ -46,8 +46,8 @@
 - 结论: **椒盐噪声已消除，云检测更保守合理** ✅
 
 **版本号**: v3.2.1
-**Commit**: 待提交
-**GitHub 状态**: [ ] 未推送 / [ ] 已推送
+**Commit**: 8dcd678
+**GitHub 状态**: [x] 未推送 / [x] 已推送
 
 ---
 
@@ -153,7 +153,7 @@
 
 | # | 修复项 | 状态 | 版本号 | Commit |
 |---|--------|------|--------|--------|
-| 1 | PFMFT/NFMFT cmin 恢复 | pending | - | - |
+| 1 | PFMFT/NFMFT cmin 恢复 | **completed** | v3.2.1 | 8dcd678 |
 | 2 | 独立程序空间一致性 | pending | - | - |
 | 3 | chk_land 邻域检查 | pending | - | - |
 | 4 | 放宽 uniform 条件 | pending | - | - |
