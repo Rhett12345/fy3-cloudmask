@@ -1104,6 +1104,7 @@ subroutine check_reg_uniformity(ielem,iline,line_edge,ele_edge, &
 
 !     local scalars
       integer i,j,imv,ide,itotal,nland,nwater,ncoast,h_output,debug, ii, jj,kk
+      integer :: nmismatch
 
 ! ... debug statement ............................................
 !      if (debug .gt. 0) then
@@ -1136,12 +1137,13 @@ subroutine check_reg_uniformity(ielem,iline,line_edge,ele_edge, &
       else
 
 ! ...    Check pixels in nlcntx by necntx region for consistency
+         nmismatch = 0
          do 100 i = iline-1 , iline+1
             do 200 j = ielem-1 , ielem+1
                !ide = kele + (j - imv)
                ide = j
 ! ...          First check consistency of ecosystem
-               if ((eco_type - sat%eco(ide,i)) .ne. 0) uniform = .false.
+               if ((eco_type - sat%eco(ide,i)) .ne. 0) nmismatch = nmismatch + 1
 ! ...          Next, check land/water consistency
                if (geo%lsm(ide,i) .eq. 1   .or.    &
                    geo%lsm(ide,i) .eq. 4) then
@@ -1149,7 +1151,7 @@ subroutine check_reg_uniformity(ielem,iline,line_edge,ele_edge, &
                else if(geo%lsm(ide,i) .eq. 2 .or.  &
                        geo%lsm(ide,i) .eq. 3) then
                   ncoast = ncoast + 1
-               else 
+               else
                   nwater = nwater + 1
                end if
 ! ...          Check snow consistency
@@ -1157,12 +1159,12 @@ subroutine check_reg_uniformity(ielem,iline,line_edge,ele_edge, &
                  !if (contx_snow(ide,i).ne.103    &
                  !    .and. contx_snow(ide,i).ne.104)
                  if (sat%snow_mask(ide,i) .ne. sym%SNOW) &
-                  uniform = .false.
+                  nmismatch = nmismatch + 1
                elseif (.not. snow) then
                  !if (contx_snow(ide,i).eq.103    &
                  !    .or. contx_snow(ide,i).eq.104)
                  if (sat%snow_mask(ide,i) .eq. sym%SNOW) &
-                  uniform = .false.
+                  nmismatch = nmismatch + 1
                endif
 200         continue
 ! ...       One more check for a common nadir pixel.  Don't want to
@@ -1171,6 +1173,10 @@ subroutine check_reg_uniformity(ielem,iline,line_edge,ele_edge, &
             !   uniform = .false.
             !endif
 100      continue
+
+! ...    Set uniform based on mismatch count.
+! ...    Allow up to 2 inconsistent neighbors (>= 7/9 match).
+        if (nmismatch .gt. 2) uniform = .false.
 
 !        At the end now, we want to decide if we have a coastline in our region.
          if(nwater + ncoast .eq. itotal ) then
