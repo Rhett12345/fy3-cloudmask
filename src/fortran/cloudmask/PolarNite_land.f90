@@ -181,10 +181,10 @@
            call conf_test(tv11_12,pfmft_land(1),pfmft_land(3),pfmft_land(4),   &
                           pfmft_land(2),1,c1)
         endif
-!        cmin1 = min(cmin1,c1)
-!        ngtests(1) = ngtests(1) + 1
+        cmin1 = min(cmin1,c1)
+        ngtests(1) = ngtests(1) + 1
       endif
-      
+
 !   nfmft test
       if (nint(masir11) .ne. nint(bad_data) .and.   &
           nint(masir12) .ne. nint(bad_data) .and.   &
@@ -199,8 +199,8 @@
         !end if
         call conf_test(tv11_12,nfmft_land(1),nfmft_land(3),nfmft_land(4),   &
                        nfmft_land(2),1,c2)
-!        cmin1 = min(cmin1,c2)
-!        ngtests(1) = ngtests(1) + 1
+        cmin1 = min(cmin1,c2)
+        ngtests(1) = ngtests(1) + 1
       endif
       
 !     **** GROUP 1 TESTS *************************************

@@ -165,10 +165,10 @@
         !end if
         call conf_test(tv11_12,pfmft_snow(1),pfmft_snow(3),pfmft_snow(4),   &
                        pfmft_snow(2),1,c1)
-  !      cmin1 = min(cmin1,c1)
-  !      ngtests(1) = ngtests(1) + 1
+        cmin1 = min(cmin1,c1)
+        ngtests(1) = ngtests(1) + 1
       endif
-      
+
 !   nfmft test
       if (nint(masir11) .ne. nint(bad_data) .and.   &
           nint(masir12) .ne. nint(bad_data) .and.   &
@@ -183,8 +183,8 @@
         !end if
         call conf_test(tv11_12,nfmft_snow(1),nfmft_snow(3),nfmft_snow(4),   &
                        nfmft_snow(2),1,c2)
- !       cmin1 = min(cmin1,c2)
- !       ngtests(1) = ngtests(1) + 1
+        cmin1 = min(cmin1,c2)
+        ngtests(1) = ngtests(1) + 1
       endif
 
 !     **** GROUP 1 TESTS *************************************

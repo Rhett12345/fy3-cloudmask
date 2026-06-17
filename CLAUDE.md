@@ -92,3 +92,11 @@ Thresholds were converted from Fortran namelist format via `scripts/convert_thre
 
 代码的主要功能依赖是fortran，而不是python，我之后拿去部署的工程化代码也是使用fortran。
 一定要保障fortran的可用性
+
+## 行为规则
+
+- **每次输出前必须以"打报告"开头**，然后再输出正文内容。
+
+## 调参数据
+
+- **小规模调参的测试数据日期固定为 2020-03-08（2020年3月8日）**。该日期的 FY-3D MERSI-II 数据作为参数调整的标准验证集。

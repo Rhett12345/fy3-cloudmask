@@ -326,8 +326,8 @@ subroutine LandDay(pxldat,vza,visusd,vrused,cirrus_vis,   &
           end if
           call conf_test(mas11_4,dl11_4lo(1),dl11_4lo(3),dl11_4lo(4),  &
                          dl11_4lo(2),1,c4)
-!         cmin2 = min(cmin2,c4)
-!         ngtests(2) = ngtests(2) + 1
+         cmin2 = min(cmin2,c4)
+         ngtests(2) = ngtests(2) + 1
         endif
 
 ! ... debug statement ............................................

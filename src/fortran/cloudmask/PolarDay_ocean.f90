@@ -221,11 +221,11 @@
         call conf_test(tv11_12,pfmft_ocean(1),pfmft_ocean(3),pfmft_ocean(4),   &
                        pfmft_ocean(2),1,c2)
 !                      print*,'tv11_12_1=',tv11_12,c2
-!        cmin1 = min(cmin1,c2)
+        cmin1 = min(cmin1,c2)
 !        cmin1 = 1.0  ! added by minmin 20180322
-!        ngtests(1) = ngtests(1) + 1
+        ngtests(1) = ngtests(1) + 1
       endif
-      
+
 !   nfmft test
       if (nint(masir11) .ne. nint(bad_data) .and.   &
           nint(masir12) .ne. nint(bad_data) .and.   &
@@ -241,9 +241,9 @@
         call conf_test(tv11_12,nfmft_ocean(1),nfmft_ocean(3),nfmft_ocean(4),   &
                        nfmft_ocean(2),1,c3)
 !                               print*,'tv11_12_2=',tv11_12,c3
-!        cmin1 = min(cmin1,c3)
+        cmin1 = min(cmin1,c3)
 !        cmin1 = 1.0  ! added by minmin 20180322
-!        ngtests(1) = ngtests(1) + 1
+        ngtests(1) = ngtests(1) + 1
       endif
 
 
@@ -355,8 +355,8 @@
         locut = tri_thres + .5
         hicut = tri_thres - .5
         call conf_test(masdf2,locut,hicut,1.0,tri_thres,1,c4)
-!        cmin2 = min(cmin2,c4)        ! revised by wuxiao
-!        ngtests(2) = ngtests(2) + 1
+        cmin2 = min(cmin2,c4)        ! revised by wuxiao
+        ngtests(2) = ngtests(2) + 1
       endif
  
 ! ... debug statement ............................................

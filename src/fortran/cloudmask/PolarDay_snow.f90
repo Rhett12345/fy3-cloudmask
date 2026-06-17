@@ -160,9 +160,9 @@
 !        print*,'tv11_12=',tv11_12
         call conf_test(tv11_12,pfmft_snow(1),pfmft_snow(3),pfmft_snow(4),   &
                        pfmft_snow(2),1,c1)
-!        cmin1 = min(cmin1,c1)
+        cmin1 = min(cmin1,c1)
 !        cmin1 = 1.0  ! added by minmin 20180322
-!        ngtests(1) = ngtests(1) + 1
+        ngtests(1) = ngtests(1) + 1
       endif
 !      print*,'c1 pfmft = ',cmin1
 !   nfmft test
@@ -181,9 +181,9 @@
         call conf_test(tv11_12,nfmft_snow(1),nfmft_snow(3),nfmft_snow(4),   &
                        nfmft_snow(2),1,c2)
 !                print*,'c2 nfmft = ',c2
-!        cmin1 = min(cmin1,c2)
+        cmin1 = min(cmin1,c2)
 !        cmin1 = 1.0  ! added by minmin 20180322
- !       ngtests(1) = ngtests(1) + 1
+        ngtests(1) = ngtests(1) + 1
       endif
       
 
