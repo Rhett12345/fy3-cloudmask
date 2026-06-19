@@ -646,10 +646,10 @@
       do kk = 1,4
         if(ngtests(kk) .gt. 0) then
           groups = groups + 1.0
-          if (kk .eq. 1) pre_confdnc = pre_confdnc * max(cmin1, 0.1)
-          if (kk .eq. 2) pre_confdnc = pre_confdnc * max(cmin2, 0.1)
-          if (kk .eq. 3) pre_confdnc = pre_confdnc * max(cmin3, 0.1)
-          if (kk .eq. 4) pre_confdnc = pre_confdnc * max(cmin4, 0.1)
+          if (kk .eq. 1) pre_confdnc = pre_confdnc * cmin1
+          if (kk .eq. 2) pre_confdnc = pre_confdnc * cmin2
+          if (kk .eq. 3) pre_confdnc = pre_confdnc * cmin3
+          if (kk .eq. 4) pre_confdnc = pre_confdnc * cmin4
         end if
       enddo
       if (groups .gt. 0) then

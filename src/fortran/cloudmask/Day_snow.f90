@@ -370,7 +370,7 @@ subroutine Day_snow(pxldat,vza,visusd,cirrus_vis,hi_elev,   &
       endif
 !
 !     Determine final confidence based on group values
-      pre_confdnc = max(cmin1, 0.1) * max(cmin2, 0.1) * max(cmin4, 0.1)
+      pre_confdnc = cmin1 * cmin2 * cmin4
 
 !     Next, make sure you have all groups covered
       groups = 0

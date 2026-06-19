@@ -1175,8 +1175,8 @@ subroutine check_reg_uniformity(ielem,iline,line_edge,ele_edge, &
 100      continue
 
 ! ...    Set uniform based on mismatch count.
-! ...    Allow up to 2 inconsistent neighbors (>= 7/9 match).
-        if (nmismatch .gt. 2) uniform = .false.
+! ...    Any inconsistency sets uniform to false.
+        if (nmismatch .gt. 0) uniform = .false.
 
 !        At the end now, we want to decide if we have a coastline in our region.
          if(nwater + ncoast .eq. itotal ) then

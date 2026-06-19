@@ -457,7 +457,7 @@
 ! ********    END OF GROUP 5 TESTS  *****************************
 
 !     Determine final confidence based on group values
-      pre_confdnc = max(cmin1, 0.1) * max(cmin2, 0.1) * max(cmin5, 0.1)
+      pre_confdnc = cmin1 * cmin2 * cmin5
 
 !     Next, make sure you have all groups covered
       groups = 0

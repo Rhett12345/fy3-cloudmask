@@ -579,7 +579,7 @@
       endif
 !
 !     Determine final confidence based on group values
-      pre_confdnc = max(cmin1, 0.1) * max(cmin2, 0.1) * max(cmin3, 0.1) * max(cmin4, 0.1)
+      pre_confdnc = cmin1 * cmin2 * cmin3 * cmin4
 
 !      if (masir11 .gt. 250.0 .and. masir11 .lt. 260.0) then
 !        print*,'DEBUG PolarDay_ocean: masir11=',masir11,' cmin=',cmin1,cmin2,cmin3,cmin4,' ngtests=',ngtests
