@@ -3,11 +3,11 @@
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Python implementation of the FYLAT FY-3D MERSI-II Cloud Mask Retrieval System (V3.2), ported from the original ~37,000-line Fortran codebase. Supports dual backend architecture with optional C++/Fortran native acceleration.
+Fortran-native cloud mask retrieval system for FY-3D MERSI-II satellite data, implementing the MODIS MOD35-derived cloud detection algorithm. Python is used only for data I/O and orchestration; all algorithm computation runs in Fortran with OpenMP parallelization.
 
 ## Overview
 
-This system generates cloud mask products from FY-3D MERSI-II satellite data. It implements the MODIS MOD35-derived cloud detection algorithm with:
+This system generates cloud mask products from FY-3D MERSI-II satellite data:
 
 - **25-channel processing** (19 VIS + 6 IR)
 - **Surface type classification** (land, water, coast, desert, snow, ice, polar)
@@ -15,16 +15,13 @@ This system generates cloud mask products from FY-3D MERSI-II satellite data. It
 - **S-curve confidence interpolation** for cloud probability
 - **48-bit testbits** and **80-bit QA bits** cloud mask encoding
 - **4-level cloud confidence**: cloudy(0), probably cloudy(1), probably clear(2), confident clear(3)
-- **NWP integration** (GFS 0.25° data for surface temperature, pressure, precipitable water)
+- **NWP integration** (FNL GRIB2 data for surface temperature, pressure, winds, precipitable water)
 - **Recalibration support** for daily solar reflectance band coefficients
 
 ## Quick Start
 
 ```bash
-# Install
-pip install -e .
-
-# Build native backend (optional, 30-100x speedup)
+# Build native Fortran backend
 cd ext/ && ./build.sh --install
 
 # Process single orbit
@@ -33,33 +30,34 @@ python -m fy3_cloudmask process \
     --l1b data/L1b.HDF --geo data/GEO.HDF --output output/
 
 # Run tests
-PYTHONPATH=src python -m pytest tests/test_algorithms.py tests/test_cloud_mask.py -v
+PYTHONPATH=src python -m pytest tests/ -v
 ```
 
 ## Architecture
 
-### Dual Backend Design
+### Fortran-Native Design
 
-The system has two mathematically-equivalent backends, auto-selected at runtime:
+All cloud mask algorithm computation runs in Fortran with OpenMP parallelization. Python handles data reading (L1B, GEO, NWP), calibration, and HDF5 output writing.
 
-| Backend | Speed | Use Case |
-|---------|-------|----------|
-| **Python/Numba** (default) | ~12 min/orbit | Development, debugging, no build required |
-| **C++/Fortran + OpenMP** | ~10-30s/orbit | Production, batch processing |
-
-```python
-# Auto-selects best available backend
-from fy3_cloudmask.algorithm.native_backend import is_native_available, process_swath_native
 ```
+Python: data I/O → calibration → NWP interpolation
+    ↓
+Fortran (pybind11): cloud mask algorithm (~37,000 lines)
+    ↓                 18 spectral test paths + 8 restoral tests
+    ↓                 S-curve confidence + bit encoding
+Python: HDF5 output + cloud amount computation
+```
+
+Performance: ~10-30s per orbit (2048 × 2000 pixels) with OpenMP.
 
 ### Algorithm Flow (per pixel)
 
 ```
-L1b HDF5 + GEO HDF5 + NWP Binary
+L1b HDF5 + GEO HDF5
     ↓
 SurfaceClassifier → land/water/coast/desert/snow/ice/polar + day/night
     ↓
-18 spectral test paths (land_day, ocean_nite, polar_day, etc.)
+18 spectral test paths (LandDay, ocean_day, LandNite, polar_day, etc.)
     ↓
 S-curve confidence → [0, 1]
     ↓
@@ -67,76 +65,32 @@ S-curve confidence → [0, 1]
     ↓
 Bit encoding → 48-bit testbits + 80-bit QA → 4-level cloud mask
     ↓
-HDF5 output (Cloud_Mask_1km/ + Cloud_Amount_5km/)
+HDF5 output (cm + conf datasets)
 ```
 
 ### Key Modules
 
 | Module | Description |
 |--------|-------------|
-| `config.py` | `FY3Config` dataclass, YAML loading with recursive merge |
+| `config.py` | `FY3Config` dataclass, YAML loading |
 | `constants.py` | Band indices, bit positions, physical constants |
 | `pipeline.py` | `CloudMaskPipeline` orchestrates full processing |
-| `algorithm/cloud_mask.py` | Main driver: `run_cloud_mask_pixel()` and `run_cloud_mask_swath()` |
-| `algorithm/tests/` | 18 test path modules (e.g., `land_day.py`, `ocean_nite.py`) |
-| `algorithm/native_backend.py` | Dual backend auto-selection and pybind11 interface |
+| `algorithm/native_backend.py` | pybind11 bridge to Fortran native engine |
+| `algorithm/cloud_mask.py` | `CloudMaskResult` dataclass |
 | `io/recalibration.py` | Daily recalibration coefficient manager |
-| `output/writer.py` | HDF5 output writer (CLM + CLA products) |
+| `output/writer.py` | HDF5 output writer |
 | `output/cloud_amount.py` | 5km cloud amount from 5×5 pixel boxes |
 
-## Recalibration
+### Fortran Source (`src/fortran/`)
 
-Supports daily recalibration coefficients for 7 solar reflectance bands (channels 1-7), replacing onboard calibration coefficients.
-
-### Data Structure
-
-```
-fy3d_recali/
-├── 202208/
-│   ├── RAD_20220803.csv
-│   ├── RAD_20220808.csv
-│   └── ...
-├── 202209/
-└── ...
-```
-
-### CSV Format
-
-```csv
-,cal0,cal1,cal2
-ch01,-3.264,0.0273,0.0
-ch02,-4.324,0.0259,0.0
-...
-ch07,-2.602,0.0208,0.0
-```
-
-### Usage
-
-```python
-from fy3_cloudmask.io.recalibration import RecalibrationManager
-
-mgr = RecalibrationManager('../fy3d_recali')
-cal0, cal1 = mgr.load_coefficients('20220803')
-
-# Apply to L1b data (replaces onboard VIS_Cal_Coeff)
-pxldat = read_l1b_data(l1b_path, recal_cal0=cal0, recal_cal1=cal1)
-```
-
-### Recalibration Test
-
-```bash
-# Compare onboard vs recalibration (single date)
-python scripts/test_recalibration.py --date 20220803 --output /tmp/recal_test
-
-# Batch test with HDF5 output
-OMP_NUM_THREADS=1 python scripts/test_recalibration.py --date 20220803 --max-orbits 2
-```
-
-Output: HDF5 files with `_onboard.h5` and `_recal.h5` suffixes, plus `comparison_summary.json`.
+| Directory | Description |
+|-----------|-------------|
+| `core/` | Foundation modules (names, constant, planck, numerical) |
+| `cloudmask/` | Cloud mask algorithm (~37,000 lines): 18 test paths, 8 restoral tests, spatial analysis, threshold reader |
+| `utils/` | String utilities + C sources (median filter) |
+| `c_api/` | ISO_C_BINDING wrappers with OpenMP parallelization |
 
 ## Native Backend Build
-
-The optional C++/Fortran backend provides 30-100x speedup via OpenMP parallelization:
 
 ```bash
 cd ext/
@@ -151,7 +105,7 @@ cd ext/
 ./build.sh --clean
 ```
 
-Requirements: `gfortran`, `g++`, `gcc`, `hdf5`, `pybind11`. The build script auto-detects conda or system compilers.
+Requirements: `gfortran`, `g++`, `gcc`, `hdf5`, `pybind11`.
 
 ## Configuration
 
@@ -163,43 +117,33 @@ config/sensors/fy3d_mersi_ii.yaml → band wavelengths, sensor geometry
 config/thresholds/mersi_ii3d_v8.yaml → 790+ algorithm thresholds
 ```
 
-### Main Config (config/default.yaml)
-
-```yaml
-sensor:
-  sensor_id: 21          # 21=FY-3D, 22=FY-3E
-  n_elem: 2048
-  n_line: 2000
-
-paths:
-  coeff_dir: ./coeff
-  output_dir: ./output
-```
-
 ## Output Products
 
 ### HDF5 Structure
 
 ```
-Cloud_Mask_1km/
-  ├── Cloud_Mask          (nElem, nLine, 6) uint8   — test bits
-  ├── Quality_Assurance   (nElem, nLine, 10) uint8  — QA bits
-  ├── Cloud_Mask_Value    (nElem, nLine) int32       — 0-3
-  ├── Confidence          (nElem, nLine) float64     — 0-1
-  ├── Longitude           (nElem, nLine) float64
-  └── Latitude            (nElem, nLine) float64
-Cloud_Amount_5km/
-  ├── Cloud_Amount        (nElem/5, nLine/5) uint8   — 0-100%
-  ├── Cloud_Amount_QA     (nElem/5, nLine/5) uint8
-  ├── Longitude           (nElem/5, nLine/5) float64
-  └── Latitude            (nElem/5, nLine/5) float64
+cm          (nElem, nLine) int32    — 0=cloudy, 1=prob_cloudy, 2=prob_clear, 3=conf_clear
+conf        (nElem, nLine) float32  — confidence [0, 1]
+lat         (nElem, nLine) float32  — latitude
+lon         (nElem, nLine) float32  — longitude
+```
+
+## Recalibration
+
+Supports daily recalibration coefficients for 7 solar reflectance bands (channels 1-7).
+
+```python
+from fy3_cloudmask.io.recalibration import RecalibrationManager
+
+mgr = RecalibrationManager('../fy3d_recali')
+cal0, cal1 = mgr.load_coefficients('20200308')
+pxldat = read_l1b_data(l1b_path, recal_cal0=cal0, recal_cal1=cal1)
 ```
 
 ## Project Structure
 
 ```
 fy3_cloudmask/
-├── pyproject.toml
 ├── README.md
 ├── config/
 │   ├── default.yaml
@@ -207,13 +151,9 @@ fy3_cloudmask/
 │   └── thresholds/mersi_ii3d_v8.yaml
 ├── src/fy3_cloudmask/
 │   ├── algorithm/
-│   │   ├── cloud_mask.py          # Main driver
-│   │   ├── confidence.py          # S-curve confidence
-│   │   ├── bitops.py              # Bit manipulation
-│   │   ├── spatial.py             # Spatial analysis
-│   │   ├── surface_classifier.py  # Surface classification
-│   │   ├── native_backend.py      # Dual backend interface
-│   │   └── tests/                 # 18 spectral test paths
+│   │   ├── cloud_mask.py          # CloudMaskResult dataclass
+│   │   ├── native_backend.py      # pybind11 Fortran bridge
+│   │   └── __init__.py
 │   ├── io/
 │   │   └── recalibration.py       # Daily recalibration manager
 │   ├── output/
@@ -222,19 +162,20 @@ fy3_cloudmask/
 │   ├── config.py
 │   ├── constants.py
 │   └── pipeline.py
-├── ext/
-│   ├── build.sh                   # Native backend build script
-│   ├── cloudmask_pybind.cpp       # pybind11 wrapper
-│   └── include/cloudmask_engine.hpp
 ├── src/fortran/
 │   ├── core/                      # Foundation modules
-│   ├── cloudmask/                 # Cloud mask algorithm
+│   ├── cloudmask/                 # Cloud mask algorithm (18 test paths + 8 restoral)
 │   ├── utils/                     # String/C utilities
 │   └── c_api/                     # ISO_C_BINDING + OpenMP wrappers
+├── ext/
+│   ├── build.sh                   # Fortran backend build script
+│   ├── cloudmask_pybind.cpp       # pybind11 wrapper
+│   └── include/
 ├── scripts/
+│   ├── process_20200308_f90.py    # Fortran processing pipeline
 │   ├── run_fortran_only.py        # Batch Fortran-native processing
-│   ├── test_recalibration.py      # Recalibration comparison test
-│   ├── find_matched_files.py      # L1b/GEO/NWP file matching
+│   ├── validate_cloudmask.py      # MYD35 validation
+│   ├── spatial_analysis.py        # Spatial noise analysis
 │   └── convert_thresholds.py      # Fortran→YAML threshold converter
 └── tests/
     ├── test_algorithms.py
@@ -246,20 +187,17 @@ fy3_cloudmask/
 
 ```bash
 # Unit tests
-PYTHONPATH=src python -m pytest tests/test_algorithms.py tests/test_cloud_mask.py -v
-
-# E2E with real FY-3D data (~12 min)
-PYTHONPATH=src python -m pytest tests/test_pipeline_e2e.py -v
+PYTHONPATH=src python -m pytest tests/ -v
 
 # Native backend validation
-PYTHONPATH=src python scripts/run_fortran_only.py --output /tmp/validation
+PYTHONPATH=src python scripts/run_fortran_only.py
 ```
 
 ## Dependencies
 
-**Required**: `numpy`, `numba`, `h5py`, `pyyaml`
+**Required**: `numpy`, `h5py`, `pyyaml`, `cfgrib`, `scipy`
 
-**Optional**: `click` (CLI), `pytest` (testing), `pybind11` (native backend build)
+**Build**: `gfortran`, `g++`, `hdf5`, `pybind11`
 
 ## License
 

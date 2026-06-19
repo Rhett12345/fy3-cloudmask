@@ -20,7 +20,7 @@ from typing import Optional
 import numpy as np
 
 from .config import FY3Config, load_config
-from .algorithm import run_cloud_mask_swath, CloudMaskResult
+from .algorithm import CloudMaskResult
 from .algorithm.native_backend import is_native_available, process_swath_native, get_backend_info
 from .output import (
     compute_cloud_amount, compute_cloud_amount_with_coords,
@@ -130,36 +130,17 @@ class CloudMaskPipeline:
 
             # Step 4: Run cloud mask algorithm
             logger.info("Step 4: Running cloud mask algorithm...")
-            if is_native_available():
-                logger.info("  Using native C++/Fortran backend (OpenMP)")
-                cm_result = self._run_native_backend(sat_data, nwp_data)
-                cm_bitarray = cm_result['cm_bitarray']
-                cm_qa_bitarray = cm_result['qa_bitarray']
-                cm_tmp = cm_result['cloud_mask']
-                confidence = cm_result['confidence']
-            else:
-                logger.info("  Using Python/Numba backend")
-                cm_bitarray, cm_qa_bitarray, cm_tmp, confidence = run_cloud_mask_swath(
-                    pxldat_swath=sat_data['pxldat'],
-                    lat_swath=sat_data['lat'],
-                    lon_swath=sat_data['lon'],
-                    elevation_swath=sat_data['elevation'],
-                    lsf_swath=sat_data['lsf'],
-                    sza_swath=sat_data['sza'],
-                    vza_swath=sat_data['vza'],
-                    glint_angle_swath=sat_data['glint_angle'],
-                    eco_type_swath=sat_data['eco_type'],
-                    snow_mask_swath=sat_data['snow_mask'],
-                    sst_swath=sat_data.get('sst', np.zeros_like(sat_data['lat'])),
-                    nwp_sfctmp_swath=nwp_data.get('sfctmp', np.zeros_like(sat_data['lat'])),
-                    nwp_pmsl_swath=nwp_data.get('pmsl', np.zeros_like(sat_data['lat'])),
-                    nwp_u_wind_swath=nwp_data.get('u_wind', np.zeros_like(sat_data['lat'])),
-                    nwp_v_wind_swath=nwp_data.get('v_wind', np.zeros_like(sat_data['lat'])),
-                    nwp_precip_water_swath=nwp_data.get('precip_water', np.zeros_like(sat_data['lat'])),
-                    bt_clr_swath=nwp_data.get('bt_clr', np.zeros((*sat_data['lat'].shape, 7))),
-                    sensor_id=self.config.sensor.sensor_id,
-                    thresholds=self.thresholds,
+            if not is_native_available():
+                raise RuntimeError(
+                    "Native C++/Fortran backend is required but not available. "
+                    "Build it with: cd ext/ && bash build.sh --install"
                 )
+            logger.info("  Using native C++/Fortran backend (OpenMP)")
+            cm_result = self._run_native_backend(sat_data, nwp_data)
+            cm_bitarray = cm_result['cm_bitarray']
+            cm_qa_bitarray = cm_result['qa_bitarray']
+            cm_tmp = cm_result['cloud_mask']
+            confidence = cm_result['confidence']
 
             # Step 5: Compute cloud amount
             logger.info("Step 5: Computing cloud amount...")

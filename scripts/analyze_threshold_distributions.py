@@ -164,7 +164,33 @@ def main():
     print("Simulated Confidence Distribution (Land Day)")
     print("=" * 70)
 
-    from fy3_cloudmask.algorithm.confidence import conf_test
+    # Inline conf_test (algorithm module is Fortran-only)
+    def conf_test(val, locut, midpt, hicut, power):
+        coeff = 2.0 ** (power - 1.0)
+        if hicut > locut:
+            gamma, alpha, flipped = hicut, locut, False
+        else:
+            gamma, alpha, flipped = locut, hicut, True
+        beta = midpt
+        if not flipped:
+            if val > gamma: return 1.0
+            if val < alpha: return 0.0
+        else:
+            if val > gamma: return 0.0
+            if val < alpha: return 1.0
+        if val <= beta:
+            range_val = 2.0 * (beta - alpha)
+            if abs(range_val) < 1.0e-12: return 0.5
+            s1 = (val - alpha) / range_val
+            c = coeff * s1**power if not flipped else 1.0 - coeff * s1**power
+        else:
+            range_val = 2.0 * (beta - gamma)
+            if abs(range_val) < 1.0e-12: return 0.5
+            s1 = (val - gamma) / range_val
+            c = 1.0 - coeff * s1**power if not flipped else coeff * s1**power
+        if c < 0.0: c = 0.0
+        elif c > 1.0: c = 1.0
+        return c
 
     mask = land_day & ~np.isnan(btd_11_12)
     n = np.sum(mask)

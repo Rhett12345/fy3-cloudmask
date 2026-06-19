@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fy3-cloudmask"
-version = "3.2.0"
-description = "FY-3D MERSI-II Cloud Mask Retrieval System - Python Implementation"
+version = "3.4.0"
+description = "FY-3D MERSI-II Cloud Mask Retrieval System"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.9"
