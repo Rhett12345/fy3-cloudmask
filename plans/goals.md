@@ -177,7 +177,7 @@ fix(scope): description
 |------|------|------|------|----------|
 | v3.3.4 | 1.1 恢复沙漠测试组 | ✅ 已完成 | main | 编译通过，恢复 pfmft/nfmft + 4组结构，保留 0.1 下限和 groups==0 防御 |
 | v3.3.5 | 1.2 恢复 restoral 上限 | ✅ 已完成 | main | 编译通过，chk_land/chk_coast confdnc 0.97→1.0 |
-| v3.3.6 | 1.3 恢复 nmtests 计数 | ⬜ 待开始 | - | - |
+| v3.3.6 | 1.3 恢复 nmtests 计数 | ✅ 已完成 | main | 编译通过, LandDay/ocean_day/LandDay_coast nmtests 5+5+4 处恢复 |
 | v3.3.7 | 1.4 移除空间门控 | ⬜ 待开始 | - | - |
 | v3.3.8 | 1.5 恢复 uniformity 容差 | ⬜ 待开始 | - | - |
 | — | 1.6 置信度下限 (暂缓) | ⏸️ | - | 待 Goal 2 后评估 |
