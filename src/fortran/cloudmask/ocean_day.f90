@@ -406,7 +406,7 @@
 !       11-12um brightness temperature difference test
 !       for thin cirrus.
 
-      if (nint(r24) .ne. nint(bad_data) .and.   &
+      if (.false. .and. nint(r24) .ne. nint(bad_data) .and.   &
           nint(r25) .ne. nint(bad_data) .and.   &
           vza .gt. 0.0) then
 

@@ -341,7 +341,7 @@
         tri_thres = trispc(masdf1)
         nmtests = nmtests + 1
         call set_qa_bit(qa_bits,18)
-        if (masdf2.lt.tri_thres) then
+        if (.false. .and. masdf2.lt.tri_thres) then
           nptests = nptests + 1
           call set_bit(testbits,18)
         end if

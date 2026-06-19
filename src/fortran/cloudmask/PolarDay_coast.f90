@@ -229,7 +229,7 @@
 !     ****  GROUP 2 TESTS  ***********************************
 ! ... 11-12um brightness temperature difference test (APOLLO TEST)
 ! ... for thin cirrus).
-      if (nint(masir11) .ne. nint(bad_data) .and.   &
+      if (.false. .and. nint(masir11) .ne. nint(bad_data) .and.   &
           nint(masir12) .ne. nint(bad_data) .and.   &
           vza .gt. 0.0) then
       
@@ -237,7 +237,7 @@
 ! ...   added apollo viewing angle/av4t regressed threshold.
 ! ...   calculate secant of viewing zenith angle.
         cosvza = cos(vza*dtr)
-        if (abs(cosvza).gt.Rel_equality_EPS) then
+        if (.false. .and. abs(cosvza).gt.Rel_equality_EPS) then
           schi = 1.0/cosvza
         else
           schi = 99.0
