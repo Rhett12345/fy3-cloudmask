@@ -433,11 +433,10 @@
 
 !       Since the IR BTDIF bit has possibly been set already,
 !       change the bit only if the current test failed.
+        nmtests = nmtests + 1
         call set_qa_bit(qa_bits,18)
         if (r24_25 .le. dfthrsh) then
-          nmtests = nmtests + 1
           nptests = nptests + 1
-          ngtests(2) = ngtests(2) + 1
         else
           call check_bits(testbits,18,rtn)
           if (rtn .eq. 1) then
@@ -448,6 +447,7 @@
         hicut = dfthrsh - 1.25
         call conf_test(r24_25,locut,hicut,1.0,dfthrsh,1,c6)
         cmin2 = min(cmin2,c6)
+        ngtests(2) = ngtests(2) + 1
       endif
 
 !-------------------------------------------------------------------
@@ -466,20 +466,20 @@
         if (nint(r24) .ne. nint(bad_data) .and.  &
             nint(r21) .ne. nint(bad_data)) then
 
+          nmtests = nmtests + 1
           call set_qa_bit(qa_bits,19)
           r24_21 = r24 - r21
 
           if (r24_21 .ge. do11_4lo(2)) then
-            nmtests = nmtests + 1
             call set_bit(testbits,19)
             nptests = nptests + 1
-            ngtests(2) = ngtests(2) + 1
           end if
 
           call conf_test(r24_21,do11_4lo(1),do11_4lo(3),do11_4lo(4),  &
                          do11_4lo(2),1,c7)
 
           cmin2 = min(cmin2,c7)
+          ngtests(2) = ngtests(2) + 1
 
         endif
 
@@ -512,21 +512,21 @@
             power = doref2(4)
           end if
 
+          nmtests = nmtests + 1
           call set_qa_bit(qa_bits,20)
           if (r04.le.midpt) then
-            nmtests = nmtests + 1
             call set_bit(testbits,20)
             nptests = nptests + 1
-            ngtests(3) = ngtests(3) + 1
           end if
           call conf_test(r04,locut,hicut,power, &
                          midpt,1,c8)
           cmin3 = min(cmin3,c8)
+          ngtests(3) = ngtests(3) + 1
         endif
 
 !-------------------------------------------------------------------
 
-!       debug statement 
+!       debug statement
 !        if (debug .gt. 0) then
 !          write(h_output,'(1x,''r04: '',6f10.4)') r04,locut,
 !     +            hicut,midpt,power,refang
@@ -559,16 +559,16 @@
             midpta(2) = dovrathi(2)
           end if
 
+          nmtests = nmtests + 1
           call set_qa_bit(qa_bits,21)
           vrat = r04 / r03
           if (vrat .lt. midpta(1) .or. vrat .gt. midpta(2)) then
-            nmtests = nmtests + 1
             call set_bit(testbits,21)
             nptests = nptests + 1
-            ngtests(3) = ngtests(3) + 1
           end if
           call conf_test_2val(vrat,locuta,hicuta,1.0,midpta,2,c9)
           cmin3 = min(cmin3,c9)
+          ngtests(3) = ngtests(3) + 1
         endif
 
 !-------------------------------------------------------------------
@@ -589,16 +589,16 @@
 
       if (visusd) then
         if (nint(r19) .ne. nint(bad_data)) then
+          nmtests = nmtests + 1
           call set_qa_bit(qa_bits,16)
           if (r19 .le. doref3(2)) then
-            nmtests = nmtests + 1
             call set_bit(testbits,16)
             nptests = nptests + 1
-            ngtests(4) = ngtests(4) + 1
           end if
           call conf_test(r19,doref3(1),doref3(3),doref3(4),  &
                          doref3(2),1,c11)
           cmin4 = min(cmin4,c11)
+          ngtests(4) = ngtests(4) + 1
         endif
 
 !-------------------------------------------------------------------

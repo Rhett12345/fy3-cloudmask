@@ -291,17 +291,17 @@ subroutine LandDay(pxldat,vza,visusd,vrused,cirrus_vis,   &
         end if
 
 !...    Set flags if test passed
+        nmtests = nmtests + 1
         call set_qa_bit(qa_bits,18)
         if (masdf1.le.dfthrsh) then
-          nmtests = nmtests + 1
           call set_bit(testbits,18)
           nptests = nptests + 1
-          ngtests(2) = ngtests(2) + 1
         end if
         locut = dfthrsh + (0.3 * dfthrsh)
         hicut = dfthrsh - 1.25
         call conf_test(masdf1,locut,hicut,1.0,dfthrsh,1,c3)
         cmin2 = min(cmin2,c3)
+        ngtests(2) = ngtests(2) + 1
       endif
 
 ! ... debug statement ............................................
@@ -317,10 +317,10 @@ subroutine LandDay(pxldat,vza,visusd,vrused,cirrus_vis,   &
       if (visusd) then
         if (nint(masir11) .ne. nint(bad_data) .and.  &
             nint(masir4) .ne.  nint(bad_data)) then
+          nmtests = nmtests + 1
+          call set_qa_bit(qa_bits,19)
           mas11_4 = masir11 - masir4
           if (mas11_4.ge.dl11_4lo(2)) then
-            nmtests = nmtests + 1
-            call set_qa_bit(qa_bits,19)
             call set_bit(testbits,19)
             nptests = nptests + 1
           end if
@@ -345,15 +345,15 @@ subroutine LandDay(pxldat,vza,visusd,vrused,cirrus_vis,   &
 ! ... visible (channel 1) reflectance threshold test.
       if (visusd) then
         if (nint(masv66) .ne. nint(bad_data)) then
+          nmtests = nmtests + 1
+          call set_qa_bit(qa_bits,20)
           if (masv66.le.dlref1(2)) then
-            nmtests = nmtests + 1
-            call set_qa_bit(qa_bits,20)
             call set_bit(testbits,20)
             nptests = nptests + 1
-            ngtests(3) = ngtests(3) + 1
           end if
           call conf_test(masv66,dlref1(1),dlref1(3),dlref1(4),dlref1(2),1,c5)
           cmin3 = min(cmin3,c5)
+          ngtests(3) = ngtests(3) + 1
         end if
 !       print*,'vvs',masv66,dlref1(1),dlref1(2),dlref1(3),cmin3 
 ! ...   debug statement ............................................
@@ -369,6 +369,8 @@ subroutine LandDay(pxldat,vza,visusd,vrused,cirrus_vis,   &
       if (visusd .and. vrused) then
         if (nint(masv66) .ne. nint(bad_data) .and.  &
             nint(masv88) .ne. nint(bad_data)) then
+          nmtests = nmtests + 1
+          call set_qa_bit(qa_bits,21)
 ! ...     Scale values by 100 to make consistent with MAS version
           s1 = masv66 * 100.
           s2 = masv88 * 100.
@@ -377,14 +379,12 @@ subroutine LandDay(pxldat,vza,visusd,vrused,cirrus_vis,   &
           eta = etan / etad
           vrat=eta * (1.0-0.25*eta) - ((s1-0.125) / (1.0-s1))
           if(vrat .gt. dlvrat(2)) then
-            nmtests = nmtests + 1
-            call set_qa_bit(qa_bits,21)
             nptests = nptests + 1
             call set_bit(testbits,21)
-            ngtests(3) = ngtests(3) + 1
           end if
           call conf_test(vrat,dlvrat(1),dlvrat(3),dlvrat(4),dlvrat(2),1,c6)
           cmin3 = min(cmin3,c6)
+          ngtests(3) = ngtests(3) + 1
         end if
 
 ! ...   debug statement ............................................
@@ -404,16 +404,16 @@ subroutine LandDay(pxldat,vza,visusd,vrused,cirrus_vis,   &
 ! ... near infrared high cloud test
       if ((.not. hi_elev) .and. visusd) then
         if (nint(masv188) .ne. nint(bad_data)) then
+          nmtests = nmtests + 1
+          call set_qa_bit(qa_bits,16)
           if (masv188.le.dlref3(2)) then
-            nmtests = nmtests + 1
-            call set_qa_bit(qa_bits,16)
             call set_bit(testbits,16)
             nptests = nptests + 1
-            ngtests(4) = ngtests(4) + 1
           end if
           call conf_test(masv188,dlref3(1),dlref3(3),dlref3(4),   &
                          dlref3(2),1,c7)
           cmin4 = min(cmin4,c7)
+          ngtests(4) = ngtests(4) + 1
         endif
 
 ! ...   debug statement ............................................
