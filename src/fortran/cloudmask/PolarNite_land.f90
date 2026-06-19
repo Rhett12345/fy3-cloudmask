@@ -470,6 +470,7 @@
         fac = 1.0 / groups
 !       Find final pixel confidence as nth root of group tests
         confdnc = pre_confdnc**fac
+        confdnc = max(confdnc, 0.1)
       else
         confdnc = 1.0
       end if

@@ -476,10 +476,11 @@ contains
         end do
         !$omp end parallel do
 
-        ! Apply 3x3 median filter to remove salt-and-pepper noise.
-        ! Physically justified: clouds at 1km resolution are not single-pixel
-        ! phenomena. This mirrors the spatial smoothing MOD35 achieves through
-        ! its 250m-to-1km sub-pixel aggregation.
+        ! Apply 3x3 median filter on confidence to remove salt-and-pepper.
+        ! Smooths the continuous confidence field then reclassifies cloud mask.
+        call smooth_conf_reclassify(out_confidence, out_cloud_mask, nElem, nLine)
+
+        ! Apply 7/8 majority filter as secondary cleanup.
         call apply_spatial_consistency(out_cloud_mask, nElem, nLine)
 
     end subroutine process_swath_c
@@ -646,7 +647,7 @@ contains
         if (btest(tb(1), 2)) b2 = 1
 
         if (b0 == 0) then
-            cm_val = 0  ! Not processed -> cloudy
+            cm_val = 5  ! Not processed -> fill value (was 0=cloudy, bug)
         else
             if (b2 == 0 .and. b1 == 0) cm_val = 0  ! Cloudy
             if (b2 == 0 .and. b1 == 1) cm_val = 1  ! Probably cloudy
@@ -656,21 +657,82 @@ contains
     end function convert_cloud_mask_value
 
     ! =========================================================================
-    ! apply_spatial_consistency -- remove salt-and-pepper noise
-    !
-    ! Only flips pixels whose classification differs from ALL 8 neighbors.
-    ! This removes single-pixel noise while preserving edges and small features.
-    ! Physically justified: clouds at 1km resolution are not single-pixel
-    ! phenomena. MOD35 achieves equivalent smoothing through 250m->1km
-    ! sub-pixel aggregation.
+    ! smooth_conf_reclassify -- 3x3 median filter on confidence, reclassify mask
+    ! =========================================================================
+    subroutine smooth_conf_reclassify(confidence, cloud_mask, nElem, nLine)
+        integer, intent(in) :: nElem, nLine
+        real(c_float), intent(inout) :: confidence(nElem, nLine)
+        integer, intent(inout) :: cloud_mask(nElem, nLine)
+
+        real(c_float) :: window(9), tmp, conf_val
+        real(c_float), allocatable :: smoothed(:,:)
+        integer :: i, j, di, dj, n, p, q
+
+        allocate(smoothed(nElem, nLine))
+        smoothed = confidence
+
+        ! 3x3 median filter
+        do j = 2, nLine - 1
+            do i = 2, nElem - 1
+                n = 0
+                do dj = -1, 1
+                    do di = -1, 1
+                        conf_val = confidence(i + di, j + dj)
+                        if (conf_val >= 0.0) then
+                            n = n + 1
+                            window(n) = conf_val
+                        end if
+                    end do
+                end do
+                if (n > 0) then
+                    do p = 1, n - 1
+                        do q = p + 1, n
+                            if (window(p) > window(q)) then
+                                tmp = window(p)
+                                window(p) = window(q)
+                                window(q) = tmp
+                            end if
+                        end do
+                    end do
+                    if (mod(n, 2) == 1) then
+                        smoothed(i, j) = window((n + 1) / 2)
+                    else
+                        smoothed(i, j) = (window(n / 2) + window(n / 2 + 1)) * 0.5
+                    end if
+                end if
+            end do
+        end do
+
+        ! Reclassify from smoothed confidence (preserve fill=5 for unprocessed)
+        do j = 1, nLine
+            do i = 1, nElem
+                if (cloud_mask(i, j) == 5) cycle
+                confidence(i, j) = smoothed(i, j)
+                conf_val = smoothed(i, j)
+                if (conf_val > 0.99) then
+                    cloud_mask(i, j) = 3
+                else if (conf_val > 0.95) then
+                    cloud_mask(i, j) = 2
+                else if (conf_val > 0.66) then
+                    cloud_mask(i, j) = 1
+                else
+                    cloud_mask(i, j) = 0
+                end if
+            end do
+        end do
+
+        deallocate(smoothed)
+    end subroutine smooth_conf_reclassify
+
+    ! =========================================================================
+    ! apply_spatial_consistency -- 7/8 majority filter for isolated clusters
     ! =========================================================================
     subroutine apply_spatial_consistency(cloud_mask, nElem, nLine)
 
         integer, intent(in) :: nElem, nLine
         integer, intent(inout) :: cloud_mask(nElem, nLine)
 
-        integer :: i, j, di, dj, center, neighbor, same_count
-        integer :: counts(0:3), max_count, max_class, c
+        integer :: i, j, di, dj, center, counts(0:3), max_count, max_class, c
         integer, allocatable :: original(:,:)
 
         allocate(original(nElem, nLine))
@@ -681,40 +743,36 @@ contains
                 center = original(i, j)
                 if (center == 5) cycle
 
-                ! Count neighbors matching center
-                same_count = 0
                 do c = 0, 3
                     counts(c) = 0
                 end do
-
                 do dj = -1, 1
                     do di = -1, 1
                         if (di == 0 .and. dj == 0) cycle
-                        neighbor = original(i + di, j + dj)
-                        if (neighbor == center) same_count = same_count + 1
-                        if (neighbor >= 0 .and. neighbor <= 3) then
-                            counts(neighbor) = counts(neighbor) + 1
+                        c = original(i + di, j + dj)
+                        if (c >= 0 .and. c <= 3) then
+                            counts(c) = counts(c) + 1
                         end if
                     end do
                 end do
 
-                ! Only flip truly isolated pixels (0 of 8 neighbors match)
-                if (same_count == 0) then
-                    max_count = 0
-                    max_class = center
-                    do c = 0, 3
-                        if (counts(c) > max_count) then
-                            max_count = counts(c)
-                            max_class = c
-                        end if
-                    end do
+                max_count = 0
+                max_class = center
+                do c = 0, 3
+                    if (counts(c) > max_count) then
+                        max_count = counts(c)
+                        max_class = c
+                    end if
+                end do
+
+                ! Flip if >= 7 of 8 neighbors agree on a different class
+                if (max_class /= center .and. max_count >= 7) then
                     cloud_mask(i, j) = max_class
                 end if
             end do
         end do
 
         deallocate(original)
-
     end subroutine apply_spatial_consistency
 
 end module cloudmask_c_api_mod

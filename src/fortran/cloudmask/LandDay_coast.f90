@@ -406,7 +406,11 @@ subroutine LandDay_coast(pxldat,vza,visusd,cirrus_vis,     &
 
 !     Next, make sure you have all groups covered
       groups = 0
-      pre_confdnc = 1.0
+      cmin1 = max(cmin1, 0.1)
+        cmin2 = max(cmin2, 0.1)
+        cmin3 = max(cmin3, 0.1)
+        cmin4 = max(cmin4, 0.1)
+        pre_confdnc = 1.0
       do kk = 1,4
         if(ngtests(kk) .gt. 0) then
           groups = groups + 1.0
@@ -420,6 +424,7 @@ subroutine LandDay_coast(pxldat,vza,visusd,cirrus_vis,     &
         fac = 1.0 / groups
 !       Find final pixel confidence as nth root of group tests
         confdnc = pre_confdnc**fac
+        confdnc = max(confdnc, 0.1)
       else
         confdnc = 1.0
       end if

@@ -382,10 +382,11 @@ subroutine Day_snow(pxldat,vza,visusd,cirrus_vis,hi_elev,   &
       if(groups .gt. 0) then
         fac = 1.0 / groups
       else
-        fac = 0.0
+        confdnc = 1.0
       end if
 !     Find final pixel confidence as nth root of group tests
       confdnc = pre_confdnc**fac
+        confdnc = max(confdnc, 0.1)
 
 ! ... debug statement ............................................
 !      if (debug .gt. 0) then

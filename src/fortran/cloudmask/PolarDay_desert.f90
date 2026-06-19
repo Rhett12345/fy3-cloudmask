@@ -174,7 +174,10 @@
 !     Determine confidence based on group values
 !----------------------------------------------------------------------
       groups = 0
-      pre_confdnc = 1.0
+      cmin1 = max(cmin1, 0.1)
+        cmin2 = max(cmin2, 0.1)
+        cmin3 = max(cmin3, 0.1)
+                pre_confdnc = 1.0
       do kk = 1,3
         if(ngtests(kk) .gt. 0) then
           groups = groups + 1.0
@@ -186,6 +189,7 @@
       if (groups .gt. 0) then
         fac = 1.0 / groups
         confdnc = pre_confdnc**fac
+        confdnc = max(confdnc, 0.1)
       else
         confdnc = 1.0
       end if
