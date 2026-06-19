@@ -178,9 +178,9 @@ fix(scope): description
 | v3.3.4 | 1.1 恢复沙漠测试组 | ✅ 已完成 | main | 编译通过，恢复 pfmft/nfmft + 4组结构，保留 0.1 下限和 groups==0 防御 |
 | v3.3.5 | 1.2 恢复 restoral 上限 | ✅ 已完成 | main | 编译通过，chk_land/chk_coast confdnc 0.97→1.0 |
 | v3.3.6 | 1.3 恢复 nmtests 计数 | ✅ 已完成 | main | 编译通过, LandDay/ocean_day/LandDay_coast nmtests 5+5+4 处恢复 |
-| v3.3.7 | 1.4 移除空间门控 | ⬜ 待开始 | - | - |
-| v3.3.8 | 1.5 恢复 uniformity 容差 | ⬜ 待开始 | - | - |
-| — | 1.6 置信度下限 (暂缓) | ⏸️ | - | 待 Goal 2 后评估 |
+| v3.3.7 | 1.4 移除空间门控 | ✅ 已完成 | main | land_module day/night 移除 BT11 std < 1.5K gate |
+| v3.3.7 | 1.5 恢复 uniformity 容差 | ✅ 已完成 | main | nmismatch > 2 → nmismatch > 0 |
+| v3.3.7 | 1.6 移除置信度下限 | ✅ 已完成 | main | 19 个文件 max(cminX,0.1) → cminX |
 | — | 1.7 PolarDay 保护 (保留) | ✅ | - | - |
 | v3.4.0 | 2.2 空间一致性滤波 | ⬜ 待定 | - | 诊断后决定 |
 | v3.4.1 | 2.3 海洋空间测试 | ⬜ 待定 | - | 诊断后决定 |
