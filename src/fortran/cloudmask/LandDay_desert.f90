@@ -122,46 +122,48 @@
 !     GROUP 1: pfmft + nfmft (11-12um BTD proxy tests)
 !----------------------------------------------------------------------
 
-! === PFMFT test disabled (btclr requires NWP RTM) ===
-! 	      if (nint(masir11) .ne. nint(bad_data) .and.   &
-! 	          nint(masir12) .ne. nint(bad_data) .and.   &
-! 	          (masir11 < pfmft_11maxthre(1)) .and.   &
-! 	          (btclr(5)-btclr(6)) > pfmft_btd_min(1) ) then
-! 	        nmtests = nmtests + 1
-! 	        if ((masir11 > 270.0) .and. (btclr(5) > 270.0)) then
-! 	            tv11_12 = (masir11 - masir12) -  &
-! 	                      (btclr(5) - btclr(6)) *(masir11 - 260.0) / &
-! 	                      (btclr(5) - 260.0)
-! 	        else
-! 	            tv11_12 = (masir11 - masir12)
-! 	        endif
-! 	        call set_qa_bit(qa_bits,14)
-! 	        call set_bit(testbits,14)
-! 	        nptests = nptests + 1
-! 	        if (is_cold_sfc == 1) then
-! 	           call conf_test(tv11_12,pfmft_cold(1),pfmft_cold(3),pfmft_cold(4),   &
-! 	                          pfmft_cold(2),1,c1)
-! 	        else
-! 	           call conf_test(tv11_12,pfmft_land(1),pfmft_land(3),pfmft_land(4),   &
-! 	                          pfmft_land(2),1,c1)
-! 	        endif
-! 	        cmin1 = min(cmin1,c1)
-! 	        ngtests(1) = ngtests(1) + 1
-! === PFMFT test disabled end ===
+! === PFMFT test (btclr from NWP sfctmp) ===
+  	      if (nint(masir11) .ne. nint(bad_data) .and.   &
+  	          nint(masir12) .ne. nint(bad_data) .and.   &
+  	          (masir11 < pfmft_11maxthre(1)) .and.   &
+  	          (btclr(5)-btclr(6)) > pfmft_btd_min(1) ) then
+  	        nmtests = nmtests + 1
+  	        if ((masir11 > 270.0) .and. (btclr(5) > 270.0)) then
+  	            tv11_12 = (masir11 - masir12) -  &
+  	                      (btclr(5) - btclr(6)) *(masir11 - 260.0) / &
+  	                      (btclr(5) - 260.0)
+  	        else
+  	            tv11_12 = (masir11 - masir12)
+  	        endif
+  	        call set_qa_bit(qa_bits,14)
+  	        call set_bit(testbits,14)
+  	        nptests = nptests + 1
+  	        if (is_cold_sfc == 1) then
+  	           call conf_test(tv11_12,pfmft_cold(1),pfmft_cold(3),pfmft_cold(4),   &
+  	                          pfmft_cold(2),1,c1)
+  	        else
+  	           call conf_test(tv11_12,pfmft_land(1),pfmft_land(3),pfmft_land(4),   &
+  	                          pfmft_land(2),1,c1)
+  	        endif
+  	        cmin1 = min(cmin1,c1)
+  	        ngtests(1) = ngtests(1) + 1
+      endif
 
-! === NFMFT test disabled (btclr requires NWP RTM) ===
-! 	      if (nint(masir11) .ne. nint(bad_data) .and.   &
-! 	          nint(masir12) .ne. nint(bad_data) .and.   &
-! 	          (masir11-masir12) <= nfmft_maxthre(1) ) then
-! 	        nmtests = nmtests + 1
-! 	        tv11_12 =  (masir11 - masir12) - (btclr(5) - btclr(6))
-! 	        call set_qa_bit(qa_bits,15)
-! 	        call set_bit(testbits,15)
-! 	        nptests = nptests + 1
-! 	        call conf_test(tv11_12,nfmft_desert(1),nfmft_desert(3),nfmft_desert(4),   &
-! 	                       nfmft_desert(2),1,c2)
-! 	        cmin1 = min(cmin1,c2)
-! 	        ngtests(1) = ngtests(1) + 1
+! === NFMFT test disabled (nfmft thresholds need recalibration for MERSI-II) ===
+!! === NFMFT test (btclr from NWP sfctmp) ===
+!  	      if (nint(masir11) .ne. nint(bad_data) .and.   &
+!  	          nint(masir12) .ne. nint(bad_data) .and.   &
+!  	          (masir11-masir12) <= nfmft_maxthre(1) ) then
+!  	        nmtests = nmtests + 1
+!  	        tv11_12 =  (masir11 - masir12) - (btclr(5) - btclr(6))
+!  	        call set_qa_bit(qa_bits,15)
+!  	        call set_bit(testbits,15)
+!  	        nptests = nptests + 1
+!  	        call conf_test(tv11_12,nfmft_desert(1),nfmft_desert(3),nfmft_desert(4),   &
+!  	                       nfmft_desert(2),1,c2)
+!  	        cmin1 = min(cmin1,c2)
+!  	        ngtests(1) = ngtests(1) + 1
+!      endif
 ! === NFMFT test disabled end ===
 
 !----------------------------------------------------------------------
@@ -169,13 +171,13 @@
 !----------------------------------------------------------------------
 
 ! ... 11-12um brightness temperature difference test for thin cirrus
-	      if (.false. .and. nint(masir11) .ne. nint(bad_data) .and.  &
+	      if (      nint(masir11) .ne. nint(bad_data) .and.  &
 	          nint(masir12) .ne. nint(bad_data) .and.  &
 	          vza .gt. 0.0) then
 	        masdf1 = masir11 - masir12
 ! ...   apollo viewing angle/av4t regressed threshold
 	        cosvza = cos(vza*dtr)
-	        if (.false. .and. abs(cosvza).gt.Rel_equality_EPS) then
+	        if (abs(cosvza).gt.Rel_equality_EPS) then
 	          schi = 1.0/cosvza
 	        else
 	          schi = 99.0
