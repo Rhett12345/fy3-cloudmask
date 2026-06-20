@@ -209,8 +209,8 @@
           !end if
             call conf_test(tv11_12,pfmft_ocean(1),pfmft_ocean(3),pfmft_ocean(4),   &
                            pfmft_ocean(2),1,c2)
-  !        cmin1 = min(cmin1,c2)
-  !        ngtests(1) = ngtests(1) + 1
+          cmin1 = min(cmin1,c2)
+          ngtests(1) = ngtests(1) + 1
       endif
       
 ! === NFMFT test disabled (nfmft thresholds need recalibration for MERSI-II) ===

@@ -99,4 +99,4 @@ Thresholds were converted from Fortran namelist format via `scripts/convert_thre
 
 ## 调参数据
 
-- **小规模调参的测试数据日期固定为 2020-03-08（2020年3月8日）**。该日期的 FY-3D MERSI-II 数据作为参数调整的标准验证集。
+- **小规模调参的测试数据日期固定为 2022-08-03（2022年8月3日）**。该日期的 FY-3D MERSI-II 数据作为参数调整的标准验证集。

@@ -217,6 +217,23 @@ def interpolate_nwp(nwp: dict, lat_px: np.ndarray, lon_px: np.ndarray) -> dict:
     return fields
 
 
+def _estimate_btclr(sfctmp: np.ndarray, n_elem: int, n_line: int) -> np.ndarray:
+    """Estimate clear-sky brightness temperatures from surface temperature.
+
+    btclr channels: [3.8um, 4.0um, 7.3um, 8.6um, 11um, 12um, spare]
+    The split-window difference btclr(5)-btclr(6) ~2K enables PFMFT triggering.
+    """
+    bt = np.zeros((n_elem, n_line, 7), dtype=np.float32)
+    bt[:, :, 0] = sfctmp - 30.0   # 3.8um (solar+thermal)
+    bt[:, :, 1] = sfctmp - 20.0   # 4.0um
+    bt[:, :, 2] = 245.0           # 7.3um water vapor band
+    bt[:, :, 3] = sfctmp - 12.0   # 8.6um
+    bt[:, :, 4] = sfctmp - 3.0    # 11um window
+    bt[:, :, 5] = sfctmp - 5.5    # 12um window (BTD ~2.5K > 0.5K)
+    bt[:, :, 6] = 0.0             # spare
+    return np.ascontiguousarray(bt)
+
+
 def run_single_orbit(
     l1b_path: str,
     geo_path: str,
@@ -300,7 +317,7 @@ def run_single_orbit(
         eco=np.ascontiguousarray(geo['eco_type'].astype(np.int8)),
         lsf=np.ascontiguousarray(geo['lsf'].astype(np.int8)),
         snow_mask=np.ascontiguousarray(np.zeros((n_elem, n_line), dtype=np.int8)),
-        btclr=np.ascontiguousarray(np.zeros((n_elem, n_line, 7), dtype=np.float32)),
+        btclr=_estimate_btclr(nwp_interp['tsfc'], n_elem, n_line),
         n_elem=n_elem, n_line=n_line,
     )
     t_fortran = time.time() - t0
