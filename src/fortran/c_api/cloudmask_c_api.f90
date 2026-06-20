@@ -513,10 +513,56 @@ contains
         ! Antarctic flag
         antarctic = (plat < -60.0)
 
-        ! Desert determination (simplified from get_pxldat)
+        ! Desert determination (from original get_pxldat)
         desert = .false.
-        if (eco_int >= 7 .and. eco_int <= 10) desert = .true.
-        if (eco_int == 16) desert = .true.
+
+        ! Global desert types
+        if (eco_int == 8 .or. eco_int == 46 .or.  &
+            eco_int == 50 .or. eco_int == 51 .or.  &
+            eco_int == 59 .or. eco_int == 71 .or.  &
+            eco_int == 11 .or. eco_int == 9 .or.   &
+            eco_int == 52) then
+            desert = .true.
+
+        ! High-elevation desert (eco_type 42 above 2000m, with regional exclusions)
+        else if ((pelev > 2000.0) .and. (eco_int == 42)) then
+            desert = .true.
+            if ((plat <= 10.0 .and. plat >= -10.0) .and. (plon >= 90.0)) then
+                desert = .false.
+            else if ((plat >= -30.0 .and. plat <= -10.0) .and.  &
+                     (plon >= 160.0 .and. plon <= 180.0)) then
+                desert = .false.
+            else if ((plat >= 10.0 .and. plat <= 26.0) .and.    &
+                     (plon >= 120.0 .and. plon <= 180.0)) then
+                desert = .false.
+            end if
+
+        ! Africa
+        else if (plat <= 20.0 .and. plat >= -35.0 .and. plon <= 60.0 .and. plon >= -20.0) then
+            if (eco_int == 7 .or. eco_int == 41 .or.   &
+                eco_int == 43 .or. eco_int == 58 .or.  &
+                eco_int == 36 .or. eco_int == 91 .or.  &
+                eco_int == 32 .or. eco_int == 29) then
+                desert = .true.
+            end if
+
+        ! Eurasia
+        else if (plat <= 70.0 .and. plat >= -60.0 .and. plon <= 180.0 .and. plon >= -20.0) then
+            if (eco_int == 11 .or. eco_int == 2) then
+                desert = .true.
+            end if
+            ! Exclude New Zealand
+            if (plat >= -50.0 .and. plat <= -30.0 .and. plon >= 160.0 .and. plon <= 180.0) then
+                desert = .false.
+            end if
+        end if
+
+        ! Australia
+        if (.not. desert .and. plat <= -11.0 .and. plat > -40.0 .and. plon <= 155.0 .and. plon > 110.0) then
+            if (eco_int == 43 .or. eco_int == 41 .or. eco_int == 91) then
+                desert = .true.
+            end if
+        end if
 
         ! Visible ratio test disable for certain ecosystems
         vrused = .true.

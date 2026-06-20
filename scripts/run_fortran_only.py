@@ -156,6 +156,7 @@ def read_geo_data(geo_path: str) -> dict:
         'lat': lat.T, 'lon': lon.T, 'elevation': dem.T,
         'eco_type': eco.T, 'sza': sza.T, 'vza': vza.T,
         'glint_angle': glint_angle.T, 'lsf': lsf_raw.T,
+        'relaz': np.abs(saa_raw / 100.0 - vaa_raw / 100.0).T,
     }
 
 
@@ -292,7 +293,7 @@ def run_single_orbit(
         lon=np.ascontiguousarray(geo['lon'].astype(np.float32)),
         satzen=np.ascontiguousarray(geo['vza'].astype(np.float32)),
         solzen=np.ascontiguousarray(geo['sza'].astype(np.float32)),
-        relaz=np.ascontiguousarray(np.zeros_like(geo['sza']).astype(np.float32)),
+        relaz=np.ascontiguousarray(geo['relaz'].astype(np.float32)),
         glint=np.ascontiguousarray(geo['glint_angle'].astype(np.float32)),
         sfctmp=sfctmp, pmsl=pmsl, uwind=uwind, vwind=vwind, tpw=tpw,
         elev=np.ascontiguousarray(geo['elevation'].astype(np.float32)),

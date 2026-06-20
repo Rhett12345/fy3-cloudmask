@@ -368,13 +368,20 @@ cirrus_vis = .false.   ! 立即覆盖
 - 主要残留问题：pfmft/nfmft 禁用、APOLLO 禁用、snow_mask=0、沙漠判断不完整
 - 极地对晴空判识能力极弱 (POD_clr < 16%)，需要后续版本解决
 
-### v3.4.5 (改善精度，需要额外数据)
+### v3.4.5 (改善精度，需要额外数据) ✅ 部分完成
 
-| BUG | 描述 | 文件 |
-|-----|------|------|
-| BUG-2 | relaz 传真实值 | scripts/run_fortran_only.py |
-| BUG-3 | snow_mask 传真实值 | scripts/run_fortran_only.py |
-| BUG-5 | 沙漠判断用离散列表 | src/fortran/c_api/cloudmask_c_api.f90 |
+| BUG | 描述 | 文件 | 状态 |
+|-----|------|------|------|
+| BUG-2 | relaz 传真实值 | scripts/run_fortran_only.py | ✅ |
+| BUG-3 | snow_mask 传真实值 | scripts/run_fortran_only.py | ⛔ 缺少NISE数据 |
+| BUG-5 | 沙漠判断用离散列表 | src/fortran/c_api/cloudmask_c_api.f90 | ✅ |
+
+**v3.4.5 变更**:
+- BUG-2: `read_geo_data` 现在从 saa/vaa 计算相对方位角 relaz，不再传零
+- BUG-5: 沙漠判断从简单范围 `eco 7-10,16` 改为完整原始逻辑（全球+高海拔+非洲+欧亚+澳大利亚+新西兰排除）
+- BUG-3: 无法修复 — `/data` 下未找到 NISE 雪冰掩码数据
+
+**v3.4.5 MYD35 验证结果**: 与 v3.4.4 基本一致（精度变化 <0.5pp），因为 relaz/沙漠修复主要影响热带中纬度，2020-03-08 轨道以极地为主
 
 ### v3.5.0 (改善检测灵敏度，需重新标定)
 
