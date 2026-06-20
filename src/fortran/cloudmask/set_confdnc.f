@@ -44,6 +44,7 @@ c ... debug statement ............................................
 !      endif
 c ...............................................................
 
+      call set_bit(testbits,0)
       if(confdnc .gt. 0.99) then
         call set_bit(testbits,1)
         call set_bit(testbits,2)

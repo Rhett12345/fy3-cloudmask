@@ -237,15 +237,13 @@ contains
             ! Fill output bit arrays
             call fill_bit_pixel(nmtests, nbands, bad_value, bad_geo,       &
                 snglnt, desert, testbits, qa_bits,                         &
-                testbits, qa_bits)  ! reuse arrays for output
+                out_testbits, out_qa_bits)
         end if
 
         ! === Convert cloud mask to integer value ===
-        out_mask = convert_cloud_mask_value(testbits)
+        out_mask = convert_cloud_mask_value(out_testbits)
 
         ! === Copy results to output arguments ===
-        out_testbits   = testbits
-        out_qa_bits    = qa_bits
         out_confidence = confdnc
         out_nmtests    = nmtests
         out_nbands     = nbands
@@ -678,7 +676,7 @@ contains
                 do dj = -1, 1
                     do di = -1, 1
                         conf_val = confidence(i + di, j + dj)
-                        if (conf_val >= 0.0) then
+                        if (conf_val >= 0.0 .and. cloud_mask(i + di, j + dj) /= 5) then
                             n = n + 1
                             window(n) = conf_val
                         end if

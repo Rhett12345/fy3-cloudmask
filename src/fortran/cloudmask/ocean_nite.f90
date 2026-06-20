@@ -129,7 +129,7 @@
 !      masir12 = pxldat(32)
 !      masir13 = pxldat(35)
 
-      masir4 = pxldat(21) ! 4.05 replace 3.959 
+      masir4 = pxldat(20) ! 3.8  replace 3.959
 !      masir65 = pxldat(27)
       masir73 = pxldat(22)
       masir8 = pxldat(23)
@@ -348,8 +348,8 @@
         locut = tri_thres + .5
         hicut = tri_thres - .5
         call conf_test(masdf2,locut,hicut,1.0,tri_thres,1,c4)
-!        cmin2 = min(cmin2,c4)           ! revised by wuxiao
-!        ngtests(2) = ngtests(2) + 1
+        cmin2 = min(cmin2,c4)
+        ngtests(2) = ngtests(2) + 1
       endif
 
 ! ... debug statement ............................................
@@ -430,8 +430,8 @@
           nptests = nptests + 1
         end if
         call conf_test(mas11_4,no11_4lo(1),no11_4lo(3),no11_4lo(4),no11_4lo(2),1,c6)
-!        cmin2 = min(cmin2,c6)        ! revised by wuxiao
-!        ngtests(2) = ngtests(2) + 1
+        cmin2 = min(cmin2,c6)
+        ngtests(2) = ngtests(2) + 1
       endif
 
 ! ... debug statement ............................................
@@ -512,12 +512,11 @@
       enddo
       if (groups .gt. 0) then
         fac = 1.0 / groups
+        confdnc = pre_confdnc**fac
       else
         confdnc = 1.0
       end if
-      !print*,'test',cmin1,cmin2,fac,uniform,pre_confdnc**fac
-      confdnc = pre_confdnc**fac
-        confdnc = max(confdnc, 0.1)
+      confdnc = max(confdnc, 0.1)
 
 ! ... debug statement ............................................
 !      if (debug .gt. 0) then

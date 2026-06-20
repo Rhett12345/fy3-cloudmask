@@ -95,14 +95,13 @@
            power,midpt,a,c9,sfcdif,corr,lst_thrsh,masdf2
       integer nptests,debug,h_output,kk
       ! added by minmin
-      real masir37, mas37_12, delta_t
+      real delta_t
 
 ! ... local arrays
       integer ngtests(3)
 ! ...
       real, parameter :: Rel_equality_EPS = 0.000001
       real, parameter :: max_vza = 65.49
-      integer i4
 ! ... external subroutines ..
       external conf_test,set_bit,set_qa_bit,tview,get_nl_thresholds
 
@@ -127,7 +126,6 @@
 !      masir11 = pxldat(31)
 !      masir12 = pxldat(32)
 !      masir13 = pxldat(35)
-      masir37 = pxldat(20)
 !      masir4 = 0.30*pxldat(21) + 0.70*pxldat(20)  ! 4.05 replace 3.959
       masir4 = pxldat(20)           !3.8 replace 3.959   jincheng
 !      masir65 = pxldat(27)
@@ -250,47 +248,7 @@
 !      endif
      
     
-!     channel (12.0 -3.7 micron) high cloud test from NPP/VIIRS ATBD   [added by minmin]
-     i4=0
-     if (i4==1) then 
-      if (nint(masir37) .ne. nint(bad_data) .and. &
-          masir37       .gt. 230.0          .and. &   
-          nint(masir12) .ne. nint(bad_data) .and. &
-          .not. sh_lake .and. ptwp .lt. 6.0) then
-          
-        mas37_12 = masir37 - masir12  
-        nmtests = nmtests + 1       
-        ! 4.5 4.0 3.5  cloudy un clear
-        call set_qa_bit(qa_bits,15)
-!        if (masir65.gt.nlh20(2)) then
-        if (mas37_12.gt.4.0) then
-          call set_bit(testbits,15)
-          nptests = nptests + 1
-        end if
-!        call conf_test(masir65,nlh20(1),nlh20(3),nlh20(4),nlh20(2),1,c2)
-        call conf_test(mas37_12,4.5,3.5,1.0,4.0,1,c2)
-
-        ! adjust confidence for modis method
-        !  clear Pro Clear  Pro Cloudy   Cloudy
-        !   90%   90%-50%     50%-0%       0%
-        !   99%   99%-95%     95%-66%      66%
-        !if (c2 > 0.90 .and. c2 < 1.0) then 
-        !    c2 = 0.99
-        !endif
-        !if (c2 > 0.50 .and. c2 <= 0.90 ) then 
-        !    c2 = 0.95 + 0.04*((c2-0.50)/0.40)
-        !endif       
-        !if (c2 > 0.0 .and. c2 <= 0.50 ) then 
-        !    c2 = 0.66 + 0.31*(c2/0.50)
-        !endif   
-        !if (c2 == 0.0 .or. c2 == 1.0) then 
-        !    c2 = c2
-        !endif   
-        cmin1 = min(cmin1,c3)
-
-        ngtests(1) = ngtests(1) + 1
-      endif
-    endif
+!     (12.0 -3.7 micron) high cloud test from NPP/VIIRS ATBD is disabled (i4=0 gate)
 ! ... debug statement ............................................
 !      if (debug .gt. 0) then
 !        write(h_output,'(1x,''masir65: '',5f10.2)') masir65,nlh20(1),
@@ -300,7 +258,6 @@
 ! ................................................................
 
 ! ... Surface Temperature Test
-      i4=0
       if ( nint(masir11) .ne. nint(bad_data) .and. (.not. hi_elev) .and.   &
            nint(masir12) .ne. nint(bad_data) .and. eco_type .ne. 8) then
 
@@ -502,8 +459,8 @@
           call conf_test(mas7_11,nl7_11s(1),nl7_11s(3),nl7_11s(4),   &
                          nl7_11s(2),1,c6)
 
-         ! cmin2 = min(cmin2,c6)
-         ! ngtests(2) = ngtests(2) + 1
+          cmin2 = min(cmin2,c6)
+          ngtests(2) = ngtests(2) + 1
 
         end if
 

@@ -271,7 +271,6 @@
 	          if (masv188 .lt. ldstci(1) .and. masv188 .ge. ldstci(2)) then
 	            call clear_bit(testbits,9)
 	            cirrus_vis = .true.
-	            cirrus_vis = .false. !added by minmin
 	          endif
 	        end if
 	      endif

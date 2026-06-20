@@ -109,7 +109,7 @@
 !      masir12 = pxldat(32)
 !      masir13 = pxldat(33)
 
-      masir4 = pxldat(21) ! 4.05 replace 3.959
+      masir4 = pxldat(20) ! 3.8  replace 3.959
 !      masir65 = pxldat(27)
       masir7 = pxldat(22)
       masir11 = pxldat(24)

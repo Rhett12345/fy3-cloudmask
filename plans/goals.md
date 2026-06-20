@@ -1,186 +1,406 @@
-# 云检测算法修复目标
+# FY-3D 云检测代码 Bug 完整汇总
 
-**创建时间**: 2026-06-17
-**当前版本**: v3.3.3 (commit `47ae0dc`, branch `main`, tag v3.3.3)
-**基准代码**: `retrieval_system_V3.1_cldmask/src/cloudmask/`
-
----
-
-## 版本规划总览
-
-每个子任务独立分支、独立版本号。流程：分支 → 实现 → 验证 → 合并 main → 打 tag。
-
-| 版本 | Task | 内容 | 优先级 |
-|------|------|------|--------|
-| v3.3.4 | 1.1 | 恢复 LandDay_desert 测试组（pfmft/nfmft） | CRITICAL |
-| v3.3.5 | 1.2 | 恢复 chk_land/chk_coast restoral 置信度上限 | HIGH |
-| v3.3.6 | 1.3 | 恢复 nmtests/ngtests 计数位置 | MEDIUM |
-| v3.3.7 | 1.4 | 移除 chk_land restoral 空间均匀性门控 | MEDIUM |
-| v3.3.8 | 1.5 | 恢复 check_reg_uniformity 原始容差 | LOW |
-| v3.4.0 | 2.2 | 添加空间一致性后处理过滤器 | CONDITIONAL |
-| v3.4.1 | 2.3 | 放松海洋空间变异性测试条件 | CONDITIONAL |
-
-> Task 1.6（置信度下限）和 Task 1.7（PolarDay 保护）不产生新版本，详见下方说明。
+**当前版本**: v3.4.3
+**GitHub 状态**: main 分支，已推送
 
 ---
 
-## Goal 1: 恢复与原始代码的计算一致性
+## 版本历史
 
-> 优先级最高。新 Fortran 后端相对于原始代码存在 9 处计算差异，需逐一修复。
-
-### Task 1.1 → v3.3.4: 恢复 LandDay_desert / LandDay_desert_c 测试组结构 [CRITICAL]
-
-- **问题**: 原始代码有 4 组测试（含 pfmft/nfmft），新版重构为 3 组，丢失了 pfmft/nfmft 测试
-- **影响**: 沙漠区域云检测能力下降，大量本应检测到的云被漏判
-- **文件**: `src/fortran/cloudmask/LandDay_desert.f90`, `LandDay_desert_c.f90`
-- **操作**:
-  1. 恢复 `include 'pfmft_nfmft_thr.inc'`
-  2. 恢复 Group 1: pfmft + nfmft (11-12um BTD)
-  3. 将 0.86um 和 1.38um 恢复为独立组（Group 3 和 Group 4）
-  4. 恢复相关变量声明（`tv11_12`, `cosvza`, `schi` 等）
-- **验证**: 对比原始代码的 4 组结构，逐行确认一致
-- **分支**: `fix/restore-desert-test-groups`
-- **tag**: `v3.3.4`
-
-### Task 1.2 → v3.3.5: 恢复 chk_land / chk_coast restoral 置信度上限 [HIGH]
-
-- **问题**: 原始代码 `confdnc = 1.0`，新版改为 `0.97`
-- **影响**: 恢复后的像素从"确定晴空"(>0.99) 降为"可能晴空"(0.95-0.99)，编码结果不同
-- **文件**: `src/fortran/cloudmask/chk_land.f90`, `chk_coast.f90`
-- **操作**: 将 `confdnc = 0.97` 改回 `confdnc = 1.0`
-- **分支**: `fix/restore-restoral-confidence`
-- **tag**: `v3.3.5`
-
-### Task 1.3 → v3.3.6: 恢复 nmtests/ngtests 计数位置 [MEDIUM]
-
-- **问题**: 原始代码在条件判断**前**无条件递增 `nmtests`，新版改为条件通过后递增
-- **影响**: `nmtests` 值偏小，影响 `fill_bit_pixel` 质量等级判定（`<3` → 质量 4，`<7` → 质量 6，`>=7` → 质量 7）
-- **文件**: `src/fortran/cloudmask/LandDay.f90`, `ocean_day.f90`, `LandDay_coast.f90`
-- **操作**: 将 `nmtests = nmtests + 1` 移回 `if` 块之前
-- **分支**: `fix/restore-nmtests-count`
-- **tag**: `v3.3.6`
-
-### Task 1.4 → v3.3.7: 移除 chk_land restoral 空间均匀性门控 [MEDIUM]
-
-- **问题**: 新增了 BT11 3x3 标准差 < 1.5K 的门控，原始代码无此限制
-- **影响**: 云边界区域的晴空恢复被跳过，加剧边界噪声
-- **文件**: `src/fortran/cloudmask/land_module.f90`
-- **操作**: 移除 `bt11_std .lt. 1.5` 条件判断及其相关计算代码
-- **分支**: `fix/remove-spatial-gate`
-- **tag**: `v3.3.7`
-
-### Task 1.5 → v3.3.8: 恢复 check_reg_uniformity 原始容差 [LOW]
-
-- **问题**: 原始代码任一不一致即 `uniform = .false.`，新版允许最多 2 个不一致
-- **影响**: 更多像素被标记为 uniform，扩大了 chk_spatial_var 和 restoral 的执行范围
-- **文件**: `src/fortran/cloudmask/fylat_fy3mersi_cloud_mask.f90` (check_reg_uniformity 子程序)
-- **操作**: 将 `nmismatch .gt. 2` 改回 `nmismatch .gt. 0`
-- **分支**: `fix/restore-uniformity-tolerance`
-- **tag**: `v3.3.8`
-
-### Task 1.6: 置信度下限 0.1 [暂不处理]
-
-- **问题**: 新版对所有路径添加了 `max(cminX, 0.1)` 下限，原始代码无此限制
-- **决策**: **暂不移除**。此改动解决了原始代码的缺陷（零置信度导致 48% 孤立像素）。待 Goal 2 空间滤波器生效后，再评估是否移除
-- **不产生新版本**
-
-### Task 1.7: PolarDay btclr 零值保护 [保留]
-
-- **问题**: 新版添加了 `(btclr(5) .ne. 0.0 .or. btclr(6) .ne. 0.0)` 条件，原始代码无此保护
-- **决策**: **保留**。合理的防御性编程，不改变正常路径行为
-- **不产生新版本**
+| 版本 | 主要变更 |
+|------|----------|
+| v3.3.3 | 基线版本 |
+| v3.3.4~v3.3.7 | Goal 1: 恢复原始 Fortran 计算逻辑 |
+| v3.4.0 | 移除 Python 算法后端，仅保留 Fortran |
+| v3.4.1 | 禁用 pfmft/nfmft 测试 (btclr 缺失) |
+| v3.4.2 | 禁用 APOLLO 11-12um 测试 (MERSI-II 不适用) |
+| v3.4.3 | 修复 3 个关键 bug + 椒盐噪声缓解 |
 
 ---
 
-## Goal 2: 消除椒盐噪声（向 MYD35 靠齐）
+## v3.4.3 已修复的问题
 
-> 在 Goal 1 全部完成后执行。先诊断 Goal 1 修复后椒盐噪声是否仍存在。
+### ✅ FIX-1 | convert_cloud_mask_value 未处理像素返回值
 
-### 诊断: 评估 Goal 1 修复效果
+**状态**: 已修复 (v3.4.3)
+**原 BUG-4 的部分修复**: `btest(tb(1), 0)` 读取 bit0 判断是否已处理，但 `set_confdnc.f` 从未设置 bit0。
+**当前修复**: `b0==0` 时返回 `cm_val=5` (fill value) 而非 `cm_val=0` (cloudy)。
 
-- **操作**:
-  1. 用 2020-03-08 数据运行 v3.3.8 Fortran 版本
-  2. 运行 `scripts/validate_spatial.py` 统计孤立像素比例
-  3. 对比 v3.3.3 的指标（fully_isolated: 16.5%, near_isolated: 44.5%）
-- **判断标准**:
-  - `fully_isolated` < 5% → 椒盐噪声已解决，跳过 Task 2.2/2.3
-  - `fully_isolated` 5-15% → 只需 Task 2.2
-  - `fully_isolated` > 15% → 需要 Task 2.2 + 2.3
-
-### Task 2.2 → v3.4.0: 添加空间一致性后处理过滤器 [CONDITIONAL]
-
-- **前提**: 诊断结果 `fully_isolated` >= 5%
-- **文件**: `src/fortran/cloudmask/fylat_fy3mersi_cloud_mask.f90`
-- **操作**: 在主循环结束后添加 MYD35 风格的 3x3 多数投票后处理
-- **逻辑**:
-  - 遍历所有像素（跳过边缘 1 像素）
-  - 统计 3x3 邻域 cloud mask 各等级计数
-  - 如果当前像素与周围 >= 7/8 邻域不一致，修正为多数类别
-  - 保留原始 testbits 供追溯
-- **验证**: 统计修复前后 `salt_pepper.fully_isolated` 变化
-- **分支**: `fix/spatial-consistency-filter`
-- **tag**: `v3.4.0`
-
-### Task 2.3 → v3.4.1: 放松海洋空间变异性测试条件 [CONDITIONAL]
-
-- **前提**: 诊断结果 `fully_isolated` >= 15%（或 Task 2.2 后海洋区域仍有噪声）
-- **文件**: `src/fortran/cloudmask/water_module.f90`
-- **操作**: 在 `water_day` 和 `water_nite` 中移除 `uniform` 门控
-- **分支**: `fix/relax-ocean-spatial-test`
-- **tag**: `v3.4.1`
+**剩余问题**: `set_confdnc.f` 仍然不设置 bit0，依赖下游 `convert_cloud_mask_value` 的特判。如果未来有其他代码读取 bit0，仍会出错。
 
 ---
 
-## 分支管理
+### ✅ FIX-2 | ocean_nite groups==0 分支
 
-```
-main (v3.3.3)
- ├── fix/restore-desert-test-groups      → merge → tag v3.3.4
- ├── fix/restore-restoral-confidence     → merge → tag v3.3.5
- ├── fix/restore-nmtests-count           → merge → tag v3.3.6
- ├── fix/remove-spatial-gate             → merge → tag v3.3.7
- ├── fix/restore-uniformity-tolerance    → merge → tag v3.3.8
- ├── fix/spatial-consistency-filter      → merge → tag v3.4.0 (conditional)
- └── fix/relax-ocean-spatial-test        → merge → tag v3.4.1 (conditional)
+**状态**: 部分修复 (v3.4.3)
+**当前代码**:
+```fortran
+if (groups .gt. 0) then
+    fac = 1.0 / groups
+else
+    confdnc = 1.0
+end if
+confdnc = pre_confdnc**fac   ! ← 这行仍然会执行
+confdnc = max(confdnc, 0.1)
 ```
 
-### 提交规范
-
+**剩余问题**: 当 groups==0 时，`confdnc=1.0` 被设置后，下一行 `confdnc = pre_confdnc**fac` 又会覆盖它。如果 fac 未初始化或为 0.0，结果碰巧正确 (x^0=1.0)，但逻辑不严谨。应改为：
+```fortran
+if (groups .gt. 0) then
+    fac = 1.0 / groups
+    confdnc = pre_confdnc**fac
+else
+    confdnc = 1.0
+end if
+confdnc = max(confdnc, 0.1)
 ```
-fix(scope): description
-
-- 详细说明修改内容
-- 引用原始代码对应位置
-- 引用 plans/original_vs_new_diff.md 差异编号
-```
-
-### 合并流程
-
-1. 从 `main` 拉分支
-2. 实现修改 → 本地编译验证
-3. 用 2020-03-08 数据运行，确认无回归
-4. PR 合并到 `main`
-5. 打 tag（如 `v3.3.4`）
-6. 继续下一个 Task
-
-### 回退策略
-
-如果某个版本引入回归：
-- `git revert <commit>` 或 `git reset --hard <tag>` 回到上一个版本
-- 单独回退该 Task，不影响其他已合并的修复
 
 ---
 
-## 进度跟踪
+### ✅ FIX-3 | 空间一致性滤波
 
-| 版本 | Task | 状态 | 分支 | 验证结果 |
-|------|------|------|------|----------|
-| v3.3.4 | 1.1 恢复沙漠测试组 | ✅ 已完成 | main | 编译通过，恢复 pfmft/nfmft + 4组结构，保留 0.1 下限和 groups==0 防御 |
-| v3.3.5 | 1.2 恢复 restoral 上限 | ✅ 已完成 | main | 编译通过，chk_land/chk_coast confdnc 0.97→1.0 |
-| v3.3.6 | 1.3 恢复 nmtests 计数 | ✅ 已完成 | main | 编译通过, LandDay/ocean_day/LandDay_coast nmtests 5+5+4 处恢复 |
-| v3.3.7 | 1.4 移除空间门控 | ✅ 已完成 | main | land_module day/night 移除 BT11 std < 1.5K gate |
-| v3.3.7 | 1.5 恢复 uniformity 容差 | ✅ 已完成 | main | nmismatch > 2 → nmismatch > 0 |
-| v3.3.7 | 1.6 移除置信度下限 | ✅ 已完成 | main | 19 个文件 max(cminX,0.1) → cminX |
-| — | 1.7 PolarDay 保护 (保留) | ✅ | - | - |
-| v3.4.0 | 2.2 空间一致性滤波 | ⬜ 待定 | - | 诊断后决定 |
-| v3.4.1 | 2.3 海洋空间测试 | ⬜ 待定 | - | 诊断后决定 |
+**状态**: 已修复 (v3.4.3)
+- 从 0/8 (仅孤立像素) 改为 7/8 多数投票
+- 添加了 3x3 中值滤波 (`smooth_conf_reclassify`)
+- 添加了 cmin floor = 0.1 和 confdnc floor = 0.1
+
+---
+
+## 未修复的 Bug
+
+### BUG-1 | IR 波数表错误 | 致命 | 椒盐直接根因
+
+**状态**: ❌ 未修复
+**文件**: `scripts/run_fortran_only.py`，第 39 行
+
+**当前值**:
+```python
+IR_WAVENUMBERS = np.array([2643.4359, 2471.654, 1382.621, 1168.182, 933.364, 836.941])
+#                                                                      ^^^^^^^ 10.7μm，错误
+```
+
+**正确值** (应从 HDF 文件头 CenterWavenum 属性读取):
+```python
+IR_WAVENUMBERS = np.array([2643.4359, 2471.654, 1382.621, 1168.182, 909.458, 836.941])
+#                          3.8μm      4.05μm    7.3μm     8.5μm    11μm     12μm
+```
+
+**影响**: 11μm 通道 BT 计算偏低约 10-15K，所有依赖 BT11 的测试全部接收到错误输入。
+**修复版本**: v3.4.4
+
+---
+
+### BUG-2 | relaz（相对方位角）全部传零 | 致命
+
+**状态**: ❌ 未修复
+**文件**: `scripts/run_fortran_only.py`，第 295 行
+
+**当前值**:
+```python
+relaz=np.ascontiguousarray(np.zeros_like(geo['sza']).astype(np.float32)),
+```
+
+**修复**:
+```python
+# 在 read_geo_data 里计算 relaz
+relaz = np.abs(geo['saa'] - geo['vaa'])  # 或 (saa - vaa) mod 360
+```
+
+**影响**: 耀斑检测结果不可靠。
+**修复版本**: v3.4.4
+
+---
+
+### BUG-3 | snow_mask 全部传零 | 严重
+
+**状态**: ❌ 未修复
+**文件**: `scripts/run_fortran_only.py`，第 301 行
+
+**当前值**:
+```python
+snow_mask=np.ascontiguousarray(np.zeros((n_elem, n_line), dtype=np.int8)),
+```
+
+**修复**: 传入真实 NISE 雪冰掩码数据。
+**影响**: 极地和高纬度夜间像素积雪/海冰判断失效。
+**修复版本**: v3.4.5 (需要额外数据源)
+
+---
+
+### BUG-4 | set_bit 编号与 btest 读取不一致 | 严重
+
+**状态**: ⚠️ 部分修复 (v3.4.3 通过特判绕过)
+**文件**: `src/fortran/cloudmask/set_confdnc.f`
+
+**当前状态**: `set_confdnc.f` 仍未设置 bit0，但 `convert_cloud_mask_value` 已通过 `b0==0 → cm_val=5` 特判绕过。
+
+**建议**: 在 `set_confdnc.f` 中添加 `set_bit(testbits, 0)` 使逻辑自洽：
+```fortran
+if(confdnc .gt. 0.99) then
+    call set_bit(testbits, 0)   ! 已处理标志
+    call set_bit(testbits, 1)
+    call set_bit(testbits, 2)
+else if(confdnc .gt. 0.95) then
+    call set_bit(testbits, 0)
+    call set_bit(testbits, 2)
+else if(confdnc .gt. 0.66) then
+    call set_bit(testbits, 0)
+    call set_bit(testbits, 1)
+else
+    call set_bit(testbits, 0)   ! 有云也是已处理
+end if
+```
+
+**修复版本**: v3.4.4
+
+---
+
+### BUG-5 | compute_pixel_flags 沙漠判断逻辑错误 | 严重
+
+**状态**: ❌ 未修复
+**文件**: `src/fortran/c_api/cloudmask_c_api.f90`
+
+**当前值**:
+```fortran
+desert = .false.
+if (eco_int >= 7 .and. eco_int <= 10) desert = .true.
+if (eco_int == 16) desert = .true.
+```
+
+**修复**: 迁移原始 `get_pxldat` 的完整沙漠判断逻辑。
+**影响**: 大量像素走错处理路径。
+**修复版本**: v3.4.5
+
+---
+
+### BUG-6 | fill_bit_pixel 输入输出传了同一数组 | 严重
+
+**状态**: ❌ 未修复
+**文件**: `src/fortran/c_api/cloudmask_c_api.f90`
+
+**当前值**:
+```fortran
+call fill_bit_pixel(..., testbits, qa_bits, testbits, qa_bits)
+```
+
+**修复**: 使用独立的输出变量。
+**影响**: 位操作结果随机。
+**修复版本**: v3.4.4
+
+---
+
+### BUG-7 | smooth_conf_reclassify 未排除未处理像素 | 中等
+
+**状态**: ❌ 未修复
+**文件**: `src/fortran/c_api/cloudmask_c_api.f90`
+
+**当前值**:
+```fortran
+if (conf_val >= 0.0) then   ! 未处理像素 confidence=0.0 也被纳入滤波
+    n = n + 1
+    window(n) = conf_val
+end if
+```
+
+**修复**:
+```fortran
+if (conf_val >= 0.0 .and. cloud_mask(i+di, j+dj) /= 5) then
+    n = n + 1
+    window(n) = conf_val
+end if
+```
+
+**影响**: 边界像素的 confidence 被向下拖拽。
+**修复版本**: v3.4.4
+
+---
+
+### BUG-8 | PolarNite_snow 和 ocean_nite 用错了 3.8μm 通道 | 严重
+
+**状态**: ❌ 未修复
+**文件**: `src/fortran/cloudmask/PolarNite_snow.f90` 和 `src/fortran/cloudmask/ocean_nite.f90`
+
+**当前值**:
+```fortran
+masir4 = pxldat(21)   ! 4.05μm (错误)
+```
+
+**修复**: 改为 `masir4 = pxldat(20)` (3.8μm)
+**影响**: 11-4μm BTD 和 4-12μm 测试使用错误通道。
+**修复版本**: v3.4.4
+
+---
+
+### BUG-9 | ocean_nite groups==0 分支逻辑不严谨 | 中等
+
+**状态**: ⚠️ 部分修复 (v3.4.3)
+**文件**: `src/fortran/cloudmask/ocean_nite.f90`
+
+**当前代码**:
+```fortran
+if (groups .gt. 0) then
+    fac = 1.0 / groups
+else
+    confdnc = 1.0
+end if
+confdnc = pre_confdnc**fac   ! ← 这行仍然执行
+```
+
+**修复**: 将 `confdnc = pre_confdnc**fac` 移入 if 块内。
+**修复版本**: v3.4.4
+
+---
+
+### BUG-10 | APOLLO 11-12μm 测试被 .false. 硬禁用 | 待定
+
+**状态**: ⚠️ 故意禁用 (v3.4.2)
+**原因**: APOLLO 查找表为 MODIS 设计 (2-10K BTD 范围)，MERSI-II 的 11-12μm BTD 范围更小 (0-4K)，导致 98.8% 像素触发测试。
+
+**后续**: 需要为 MERSI-II 重新标定 APOLLO 查找表，或改用 MERSI-II 专用阈值。
+**修复版本**: v3.5.0 (需要重新标定)
+
+---
+
+### BUG-11 | pfmft 和 nfmft 全部注释 | 待定
+
+**状态**: ⚠️ 故意禁用 (v3.4.1)
+**原因**: btclr (晴空亮温) 缺失，传入全零。
+
+**后续**:
+1. 提供 btclr 数据后解注释
+2. 重新标定 `nfmft_land` 阈值 (-23~-22K 远离典型值)
+
+**修复版本**: v3.5.0 (需要 NWP RTM 数据)
+
+---
+
+### BUG-12 | ocean_nite 三光谱和 11-4μm 置信度注释掉了 | 中等
+
+**状态**: ❌ 未修复
+**文件**: `src/fortran/cloudmask/ocean_nite.f90`
+
+**当前值**:
+```fortran
+! cmin2 = min(cmin2, c4)       ! 三光谱，被注释 by wuxiao
+! cmin2 = min(cmin2, c6)       ! 11-4μm，被注释 by wuxiao
+```
+
+**修复**: 取消注释。
+**修复版本**: v3.4.4
+
+---
+
+### BUG-13 | LandNite 7.3-11μm 置信度注释掉了 | 中等
+
+**状态**: ❌ 未修复
+**文件**: `src/fortran/cloudmask/LandNite.f90`
+
+**当前值**:
+```fortran
+! cmin2 = min(cmin2, c6)   ! 被注释
+```
+
+**修复**: 取消注释。
+**修复版本**: v3.4.4
+
+---
+
+### BUG-14 | LandNite 12-3.7μm 测试是死代码 | 低
+
+**状态**: ❌ 未修复
+**文件**: `src/fortran/cloudmask/LandNite.f90`
+
+**当前值**:
+```fortran
+i4 = 0
+if (i4 == 1) then   ! 永远为假
+```
+
+**修复**: 决定是否启用，否则删除。
+**修复版本**: v3.4.4
+
+---
+
+### BUG-15 | LandDay_desert 薄卷云标志被立即覆盖 | 低
+
+**状态**: ❌ 未修复
+**文件**: `src/fortran/cloudmask/LandDay_desert.f90`
+
+**当前值**:
+```fortran
+cirrus_vis = .true.
+cirrus_vis = .false.   ! 立即覆盖
+```
+
+**修复**: 删除第二行。
+**修复版本**: v3.4.4
+
+---
+
+## 修复计划
+
+### v3.4.4 (修复直接导致椒盐的 Bug) ✅ 已完成
+
+| BUG | 描述 | 文件 | 状态 |
+|-----|------|------|------|
+| BUG-1 | IR_WAVENUMBERS 波数值 | scripts/run_fortran_only.py | ✅ |
+| BUG-4 | set_confdnc 加 set_bit(testbits,0) | src/fortran/cloudmask/set_confdnc.f | ✅ |
+| BUG-6 | fill_bit_pixel 独立输出参数 | src/fortran/c_api/cloudmask_c_api.f90 | ✅ |
+| BUG-7 | smooth_conf_reclassify 排除未处理像素 | src/fortran/c_api/cloudmask_c_api.f90 | ✅ |
+| BUG-8 | PolarNite_snow/ocean_nite 统一用 pxldat(20) | PolarNite_snow.f90, ocean_nite.f90 | ✅ |
+| BUG-9 | ocean_nite groups==0 分支 | ocean_nite.f90 | ✅ |
+| BUG-12 | ocean_nite 取消 c4/c6 注释 | ocean_nite.f90 | ✅ |
+| BUG-13 | LandNite 取消 c6 注释 | LandNite.f90 | ✅ |
+| BUG-14 | LandNite i4=0 死代码清理 | LandNite.f90 | ✅ |
+| BUG-15 | LandDay_desert cirrus_vis 覆盖 | LandDay_desert.f90 | ✅ |
+
+**v3.4.4 MYD35 验证结果 (2020-03-08)**:
+
+| Orbit | 精度 | FY3D云量 | MYD35云量 | POD_cld | POD_clr | 区域 |
+|-------|------|----------|-----------|---------|---------|------|
+| 1345 | 27.6% | 97.9% | 26.6% | 97.7% | 2.1% | 南极 (-79~-54) |
+| 1435 | 44.9% | 90.6% | 43.6% | 90.6% | 9.5% | 北极 (56~82) |
+| 1525 | 70.2% | 84.4% | 79.1% | 84.5% | 16.0% | 南极 (-85~-58) |
+
+**v3.4.4 结论**:
+- BUG-1 修复 (11μm波数纠正) 后 BT11 变暖约10-15K，但极地云量仍然过高
+- Orbit 1525 与 MYD35 一致性尚可 (70%)，但 1345/1435 极地严重过判云
+- 主要残留问题：pfmft/nfmft 禁用、APOLLO 禁用、snow_mask=0、沙漠判断不完整
+- 极地对晴空判识能力极弱 (POD_clr < 16%)，需要后续版本解决
+
+### v3.4.5 (改善精度，需要额外数据)
+
+| BUG | 描述 | 文件 |
+|-----|------|------|
+| BUG-2 | relaz 传真实值 | scripts/run_fortran_only.py |
+| BUG-3 | snow_mask 传真实值 | scripts/run_fortran_only.py |
+| BUG-5 | 沙漠判断用离散列表 | src/fortran/c_api/cloudmask_c_api.f90 |
+
+### v3.5.0 (改善检测灵敏度，需重新标定)
+
+| BUG | 描述 | 文件 |
+|-----|------|------|
+| BUG-10 | APOLLO 测试重新标定 | 所有 .f90 测试路径 |
+| BUG-11 | pfmft/nfmft 解注释 + 重新标定阈值 | 所有 .f90 测试路径 |
+
+---
+
+## 当前工作目录状态
+
+```
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  modified:   .claude/settings.local.json
+  modified:   ext/build/fortran_modules/cloudmask_c_api_mod.mod
+  modified:   plans/goals.md
+  deleted:    plans/original_vs_new_diff.md
+
+Untracked files:
+  scripts/diag_pfmft_nfmft.py
+  scripts/diag_run_fortran.py
+  scripts/process_20200308_btclr.py
+  scripts/process_20200308_f90.py
+  scripts/test_btclr_fix.py
+```
