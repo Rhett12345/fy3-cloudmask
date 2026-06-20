@@ -1,7 +1,8 @@
 # FY-3D 云检测代码 Bug 完整汇总
 
-**当前版本**: v3.4.3
+**当前版本**: v3.5.0
 **GitHub 状态**: main 分支，已推送
+**核心目标**: 消除椒盐噪声，提升与 MYD35 的一致性
 
 ---
 
@@ -15,399 +16,206 @@
 | v3.4.1 | 禁用 pfmft/nfmft 测试 (btclr 缺失) |
 | v3.4.2 | 禁用 APOLLO 11-12um 测试 (MERSI-II 不适用) |
 | v3.4.3 | 修复 3 个关键 bug + 椒盐噪声缓解 |
+| v3.4.4 | 修复 10 个 Fortran 计算 bug |
+| v3.4.5 | 修复 relaz 和沙漠检测 |
+| v3.5.0 | 重新启用 APOLLO + PFMFT 测试 |
 
 ---
 
-## v3.4.3 已修复的问题
+## 椒盐噪声根因诊断 (v3.5.0 确定性分析)
 
-### ✅ FIX-1 | convert_cloud_mask_value 未处理像素返回值
+### 现象
 
-**状态**: 已修复 (v3.4.3)
-**原 BUG-4 的部分修复**: `btest(tb(1), 0)` 读取 bit0 判断是否已处理，但 `set_confdnc.f` 从未设置 bit0。
-**当前修复**: `b0==0` 时返回 `cm_val=5` (fill value) 而非 `cm_val=0` (cloudy)。
+Fig 2 MYD35 验证统计：Agreement 46.5%，HSS 0.085
+- truth:Clr -> pred:Cld = 41%（晴空误判为云）
+- truth:Cld -> pred:Clr = 38%（云误判为晴空）
+- 双向对称误判 -> 算法置信度在 0.5 附近随机跳动
 
-**剩余问题**: `set_confdnc.f` 仍然不设置 bit0，依赖下游 `convert_cloud_mask_value` 的特判。如果未来有其他代码读取 bit0，仍会出错。
+### 根因 1：PFMFT 触发条件导致 Group 1 完全失效 [CRITICAL]
 
----
-
-### ✅ FIX-2 | ocean_nite groups==0 分支
-
-**状态**: 部分修复 (v3.4.3)
-**当前代码**:
+**LandDay.f90** 的 PFMFT 触发条件：
 ```fortran
-if (groups .gt. 0) then
-    fac = 1.0 / groups
-else
-    confdnc = 1.0
-end if
-confdnc = pre_confdnc**fac   ! ← 这行仍然会执行
-confdnc = max(confdnc, 0.1)
+(btclr(5)-btclr(6)) > pfmft_btd_min(1)   ! pfmft_btd_min = 0.5
 ```
 
-**剩余问题**: 当 groups==0 时，`confdnc=1.0` 被设置后，下一行 `confdnc = pre_confdnc**fac` 又会覆盖它。如果 fac 未初始化或为 0.0，结果碰巧正确 (x^0=1.0)，但逻辑不严谨。应改为：
-```fortran
-if (groups .gt. 0) then
-    fac = 1.0 / groups
-    confdnc = pre_confdnc**fac
-else
-    confdnc = 1.0
-end if
-confdnc = max(confdnc, 0.1)
-```
+btclr 全部传零（见根因 2），所以 0.0 > 0.5 永远为假。
+-> LandDay 的 Group 1（热红外裂窗测试）永远没有测试执行
+-> ngtests(1) = 0，cmin1 = 1.0，Group 1 不参与几何平均
 
----
+**ocean_day.f90** 的 PFMFT 更糟糕：
+- 触发条件用的是 (masir11-masir12) < pfmft_btd_min（不用 btclr），所以能触发
+- 但 conf_test 调用和 cmin1/ngtests 更新全部被注释掉
+- 结果：testbit 设了，nmtests 加了，但置信度贡献为零
 
-### ✅ FIX-3 | 空间一致性滤波
+**ocean_nite.f90** 的 PFMFT：同 ocean_day，conf_test 调用被注释，cmin1/ngtests 未更新
 
-**状态**: 已修复 (v3.4.3)
-- 从 0/8 (仅孤立像素) 改为 7/8 多数投票
-- 添加了 3x3 中值滤波 (`smooth_conf_reclassify`)
-- 添加了 cmin floor = 0.1 和 confdnc floor = 0.1
+**LandNite.f90** 的 PFMFT：触发条件用 btclr(5)-btclr(6) > 0.5，同 LandDay 永远不触发
 
----
+**结论：所有路径的 Group 1（热红外裂窗）实际不产生置信度贡献。**
 
-## 未修复的 Bug
+### 根因 2：btclr 全零导致 APOLLO 和 PFMFT 同时崩溃 [CRITICAL]
 
-### BUG-1 | IR 波数表错误 | 致命 | 椒盐直接根因
-
-**状态**: ❌ 未修复
-**文件**: `scripts/run_fortran_only.py`，第 39 行
-
-**当前值**:
+**文件**: scripts/run_fortran_only.py
 ```python
-IR_WAVENUMBERS = np.array([2643.4359, 2471.654, 1382.621, 1168.182, 933.364, 836.941])
-#                                                                      ^^^^^^^ 10.7μm，错误
+btclr=np.ascontiguousarray(np.zeros((n_elem, n_line, 7), dtype=np.float32)),
 ```
 
-**正确值** (应从 HDF 文件头 CenterWavenum 属性读取):
-```python
-IR_WAVENUMBERS = np.array([2643.4359, 2471.654, 1382.621, 1168.182, 909.458, 836.941])
-#                          3.8μm      4.05μm    7.3μm     8.5μm    11μm     12μm
-```
+连锁效应：
+1. PFMFT 触发条件 btclr(5)-btclr(6) > 0.5 永远为假 -> Group 1 失效
+2. APOLLO 查找表用 btclr(5) 作参考温度 -> 0K 查找返回极端值
+3. conf_test 对极端阈值的处理：abs(range) < 1e-12 时返回 c = 0.5
+4. 大量像素的 Group 2 confidence 落在 0.5 附近
+5. 几何平均后 confidence 在 0.5-0.7 区间随机分布
+6. set_confdnc 在 cloudy/prob_cloudy 边界随机跳动 -> 椒盐
 
-**影响**: 11μm 通道 BT 计算偏低约 10-15K，所有依赖 BT11 的测试全部接收到错误输入。
-**修复版本**: v3.4.4
+### 根因 3：snow_mask 全零导致雪面误判为云 [HIGH]
 
----
-
-### BUG-2 | relaz（相对方位角）全部传零 | 致命
-
-**状态**: ❌ 未修复
-**文件**: `scripts/run_fortran_only.py`，第 295 行
-
-**当前值**:
-```python
-relaz=np.ascontiguousarray(np.zeros_like(geo['sza']).astype(np.float32)),
-```
-
-**修复**:
-```python
-# 在 read_geo_data 里计算 relaz
-relaz = np.abs(geo['saa'] - geo['vaa'])  # 或 (saa - vaa) mod 360
-```
-
-**影响**: 耀斑检测结果不可靠。
-**修复版本**: v3.4.4
-
----
-
-### BUG-3 | snow_mask 全部传零 | 严重
-
-**状态**: ❌ 未修复
-**文件**: `scripts/run_fortran_only.py`，第 301 行
-
-**当前值**:
+**文件**: scripts/run_fortran_only.py
 ```python
 snow_mask=np.ascontiguousarray(np.zeros((n_elem, n_line), dtype=np.int8)),
 ```
 
-**修复**: 传入真实 NISE 雪冰掩码数据。
-**影响**: 极地和高纬度夜间像素积雪/海冰判断失效。
-**修复版本**: v3.4.5 (需要额外数据源)
+雪/冰检测完全依赖 NDSI 可见光方法。夜间和高纬度冬季无法检测积雪，雪面高反射率被可见光测试判为云。
+
+### 根因 4：ocean 路径 APOLLO 测试仍启用但阈值不适用 [HIGH]
+
+APOLLO 查找表为 MODIS 设计（BTD 范围 2-10K），MERSI-II 的 11-12um BTD 范围 0-4K。
+- 在 270K/天底时 APOLLO 返回 4.0K 阈值
+- 静态阈值是 3.0K
+- 3-4K 范围的像素：APOLLO 判晴空，静态判有云 -> 边界噪声
+
+LandDay/LandNite 已用 .false. 禁用 APOLLO，但 ocean_day/ocean_nite 仍然启用。
 
 ---
 
-### BUG-4 | set_bit 编号与 btest 读取不一致 | 严重
+## 其他已知 Bug
 
-**状态**: ⚠️ 部分修复 (v3.4.3 通过特判绕过)
-**文件**: `src/fortran/cloudmask/set_confdnc.f`
+### 已修复 (v3.4.3~v3.5.0)
 
-**当前状态**: `set_confdnc.f` 仍未设置 bit0，但 `convert_cloud_mask_value` 已通过 `b0==0 → cm_val=5` 特判绕过。
+| BUG | 描述 | 修复版本 |
+|-----|------|----------|
+| BUG-1 | IR_WAVENUMBERS[4] 从 933.364 改为 909.458 | v3.4.4 |
+| BUG-2 | relaz 从 saa/vaa 计算，不再传零 | v3.4.5 |
+| BUG-4 | set_confdnc 添加 set_bit(testbits,0) | v3.4.4 |
+| BUG-5 | 沙漠判断改为完整原始逻辑 | v3.4.5 |
+| BUG-6 | fill_bit_pixel 独立输出参数 | v3.4.4 |
+| BUG-7 | smooth_conf_reclassify 排除未处理像素 | v3.4.4 |
+| BUG-8 | PolarNite_snow/ocean_nite 统一用 pxldat(20) | v3.4.4 |
+| BUG-9 | ocean_nite groups==0 分支修复 | v3.4.4 |
+| BUG-12 | ocean_nite 取消 c4/c6 注释 | v3.4.4 |
+| BUG-13 | LandNite 取消 c6 注释 | v3.4.4 |
+| BUG-14 | LandNite i4=0 死代码清理 | v3.4.4 |
+| BUG-15 | LandDay_desert cirrus_vis 覆盖修复 | v3.4.4 |
 
-**建议**: 在 `set_confdnc.f` 中添加 `set_bit(testbits, 0)` 使逻辑自洽：
-```fortran
-if(confdnc .gt. 0.99) then
-    call set_bit(testbits, 0)   ! 已处理标志
-    call set_bit(testbits, 1)
-    call set_bit(testbits, 2)
-else if(confdnc .gt. 0.95) then
-    call set_bit(testbits, 0)
-    call set_bit(testbits, 2)
-else if(confdnc .gt. 0.66) then
-    call set_bit(testbits, 0)
-    call set_bit(testbits, 1)
-else
-    call set_bit(testbits, 0)   ! 有云也是已处理
-end if
-```
+### 未修复
 
-**修复版本**: v3.4.4
-
----
-
-### BUG-5 | compute_pixel_flags 沙漠判断逻辑错误 | 严重
-
-**状态**: ❌ 未修复
-**文件**: `src/fortran/c_api/cloudmask_c_api.f90`
-
-**当前值**:
-```fortran
-desert = .false.
-if (eco_int >= 7 .and. eco_int <= 10) desert = .true.
-if (eco_int == 16) desert = .true.
-```
-
-**修复**: 迁移原始 `get_pxldat` 的完整沙漠判断逻辑。
-**影响**: 大量像素走错处理路径。
-**修复版本**: v3.4.5
-
----
-
-### BUG-6 | fill_bit_pixel 输入输出传了同一数组 | 严重
-
-**状态**: ❌ 未修复
-**文件**: `src/fortran/c_api/cloudmask_c_api.f90`
-
-**当前值**:
-```fortran
-call fill_bit_pixel(..., testbits, qa_bits, testbits, qa_bits)
-```
-
-**修复**: 使用独立的输出变量。
-**影响**: 位操作结果随机。
-**修复版本**: v3.4.4
-
----
-
-### BUG-7 | smooth_conf_reclassify 未排除未处理像素 | 中等
-
-**状态**: ❌ 未修复
-**文件**: `src/fortran/c_api/cloudmask_c_api.f90`
-
-**当前值**:
-```fortran
-if (conf_val >= 0.0) then   ! 未处理像素 confidence=0.0 也被纳入滤波
-    n = n + 1
-    window(n) = conf_val
-end if
-```
-
-**修复**:
-```fortran
-if (conf_val >= 0.0 .and. cloud_mask(i+di, j+dj) /= 5) then
-    n = n + 1
-    window(n) = conf_val
-end if
-```
-
-**影响**: 边界像素的 confidence 被向下拖拽。
-**修复版本**: v3.4.4
-
----
-
-### BUG-8 | PolarNite_snow 和 ocean_nite 用错了 3.8μm 通道 | 严重
-
-**状态**: ❌ 未修复
-**文件**: `src/fortran/cloudmask/PolarNite_snow.f90` 和 `src/fortran/cloudmask/ocean_nite.f90`
-
-**当前值**:
-```fortran
-masir4 = pxldat(21)   ! 4.05μm (错误)
-```
-
-**修复**: 改为 `masir4 = pxldat(20)` (3.8μm)
-**影响**: 11-4μm BTD 和 4-12μm 测试使用错误通道。
-**修复版本**: v3.4.4
-
----
-
-### BUG-9 | ocean_nite groups==0 分支逻辑不严谨 | 中等
-
-**状态**: ⚠️ 部分修复 (v3.4.3)
-**文件**: `src/fortran/cloudmask/ocean_nite.f90`
-
-**当前代码**:
-```fortran
-if (groups .gt. 0) then
-    fac = 1.0 / groups
-else
-    confdnc = 1.0
-end if
-confdnc = pre_confdnc**fac   ! ← 这行仍然执行
-```
-
-**修复**: 将 `confdnc = pre_confdnc**fac` 移入 if 块内。
-**修复版本**: v3.4.4
-
----
-
-### BUG-10 | APOLLO 11-12μm 测试被 .false. 硬禁用 | 待定
-
-**状态**: ⚠️ 故意禁用 (v3.4.2)
-**原因**: APOLLO 查找表为 MODIS 设计 (2-10K BTD 范围)，MERSI-II 的 11-12μm BTD 范围更小 (0-4K)，导致 98.8% 像素触发测试。
-
-**后续**: 需要为 MERSI-II 重新标定 APOLLO 查找表，或改用 MERSI-II 专用阈值。
-**修复版本**: v3.5.0 (需要重新标定)
-
----
-
-### BUG-11 | pfmft 和 nfmft 全部注释 | 待定
-
-**状态**: ⚠️ 故意禁用 (v3.4.1)
-**原因**: btclr (晴空亮温) 缺失，传入全零。
-
-**后续**:
-1. 提供 btclr 数据后解注释
-2. 重新标定 `nfmft_land` 阈值 (-23~-22K 远离典型值)
-
-**修复版本**: v3.5.0 (需要 NWP RTM 数据)
-
----
-
-### BUG-12 | ocean_nite 三光谱和 11-4μm 置信度注释掉了 | 中等
-
-**状态**: ❌ 未修复
-**文件**: `src/fortran/cloudmask/ocean_nite.f90`
-
-**当前值**:
-```fortran
-! cmin2 = min(cmin2, c4)       ! 三光谱，被注释 by wuxiao
-! cmin2 = min(cmin2, c6)       ! 11-4μm，被注释 by wuxiao
-```
-
-**修复**: 取消注释。
-**修复版本**: v3.4.4
-
----
-
-### BUG-13 | LandNite 7.3-11μm 置信度注释掉了 | 中等
-
-**状态**: ❌ 未修复
-**文件**: `src/fortran/cloudmask/LandNite.f90`
-
-**当前值**:
-```fortran
-! cmin2 = min(cmin2, c6)   ! 被注释
-```
-
-**修复**: 取消注释。
-**修复版本**: v3.4.4
-
----
-
-### BUG-14 | LandNite 12-3.7μm 测试是死代码 | 低
-
-**状态**: ❌ 未修复
-**文件**: `src/fortran/cloudmask/LandNite.f90`
-
-**当前值**:
-```fortran
-i4 = 0
-if (i4 == 1) then   ! 永远为假
-```
-
-**修复**: 决定是否启用，否则删除。
-**修复版本**: v3.4.4
-
----
-
-### BUG-15 | LandDay_desert 薄卷云标志被立即覆盖 | 低
-
-**状态**: ❌ 未修复
-**文件**: `src/fortran/cloudmask/LandDay_desert.f90`
-
-**当前值**:
-```fortran
-cirrus_vis = .true.
-cirrus_vis = .false.   ! 立即覆盖
-```
-
-**修复**: 删除第二行。
-**修复版本**: v3.4.4
+| BUG | 描述 | 严重度 | 状态 |
+|-----|------|--------|------|
+| 根因1 | PFMFT Group1 全路径失效 | CRITICAL | 待修 |
+| 根因2 | btclr 全零 | CRITICAL | 待修 |
+| 根因3 | snow_mask 全零 | HIGH | 缺数据 |
+| 根因4 | ocean APOLLO 阈值不适用 | HIGH | 待修 |
+| BUG-16 | ocean_day PFMFT conf_test 注释 | CRITICAL | 待修 |
+| BUG-17 | ocean_nite PFMFT conf_test 注释 | CRITICAL | 待修 |
+| BUG-18 | GEMI 公式除零风险 (s1->1.0) | MEDIUM | 待修 |
+| BUG-19 | ocean_nite 11-4um 阈值过窄 (2.25K) | MEDIUM | 待标定 |
 
 ---
 
 ## 修复计划
 
-### v3.4.4 (修复直接导致椒盐的 Bug) ✅ 已完成
+### v3.5.1 (消除椒盐噪声 - 当前最高优先级)
 
-| BUG | 描述 | 文件 | 状态 |
-|-----|------|------|------|
-| BUG-1 | IR_WAVENUMBERS 波数值 | scripts/run_fortran_only.py | ✅ |
-| BUG-4 | set_confdnc 加 set_bit(testbits,0) | src/fortran/cloudmask/set_confdnc.f | ✅ |
-| BUG-6 | fill_bit_pixel 独立输出参数 | src/fortran/c_api/cloudmask_c_api.f90 | ✅ |
-| BUG-7 | smooth_conf_reclassify 排除未处理像素 | src/fortran/c_api/cloudmask_c_api.f90 | ✅ |
-| BUG-8 | PolarNite_snow/ocean_nite 统一用 pxldat(20) | PolarNite_snow.f90, ocean_nite.f90 | ✅ |
-| BUG-9 | ocean_nite groups==0 分支 | ocean_nite.f90 | ✅ |
-| BUG-12 | ocean_nite 取消 c4/c6 注释 | ocean_nite.f90 | ✅ |
-| BUG-13 | LandNite 取消 c6 注释 | LandNite.f90 | ✅ |
-| BUG-14 | LandNite i4=0 死代码清理 | LandNite.f90 | ✅ |
-| BUG-15 | LandDay_desert cirrus_vis 覆盖 | LandDay_desert.f90 | ✅ |
+**目标**: 修复 4 个根因，将 Agreement 从 46% 提升到 65%+
 
-**v3.4.4 MYD35 验证结果 (2020-03-08)**:
+| 修复项 | 描述 | 文件 |
+|--------|------|------|
+| FIX-A | btclr 用 sfctmp 估算填充 | scripts/run_fortran_only.py |
+| FIX-B | ocean_day PFMFT 取消 conf_test 注释 | ocean_day.f90 |
+| FIX-C | ocean_nite PFMFT 取消 conf_test 注释 | ocean_nite.f90 |
+| FIX-D | ocean 路径禁用 APOLLO (加 .false. 门控) | ocean_day.f90, ocean_nite.f90 |
 
-| Orbit | 精度 | FY3D云量 | MYD35云量 | POD_cld | POD_clr | 区域 |
-|-------|------|----------|-----------|---------|---------|------|
-| 1345 | 27.6% | 97.9% | 26.6% | 97.7% | 2.1% | 南极 (-79~-54) |
-| 1435 | 44.9% | 90.6% | 43.6% | 90.6% | 9.5% | 北极 (56~82) |
-| 1525 | 70.2% | 84.4% | 79.1% | 84.5% | 16.0% | 南极 (-85~-58) |
+#### FIX-A: btclr 估算方案
 
-**v3.4.4 结论**:
-- BUG-1 修复 (11μm波数纠正) 后 BT11 变暖约10-15K，但极地云量仍然过高
-- Orbit 1525 与 MYD35 一致性尚可 (70%)，但 1345/1435 极地严重过判云
-- 主要残留问题：pfmft/nfmft 禁用、APOLLO 禁用、snow_mask=0、沙漠判断不完整
-- 极地对晴空判识能力极弱 (POD_clr < 16%)，需要后续版本解决
+```python
+# scripts/run_fortran_only.py
+sfctmp_arr = nwp_interp['tsfc'].astype(np.float32)
+btclr_arr = np.zeros((n_elem, n_line, 7), dtype=np.float32)
+btclr_arr[:, :, 4] = sfctmp_arr          # btclr(5): 11um 晴空BT ~ 地表温度
+btclr_arr[:, :, 5] = sfctmp_arr - 1.0    # btclr(6): 12um 晴空BT ~ sfctmp - 1K
+btclr_arr[:, :, 0] = sfctmp_arr - 25.0   # btclr(1): 3.8um 晴空BT
+```
 
-### v3.4.5 (改善精度，需要额外数据) ✅ 部分完成
+效果：
+- btclr(5) - btclr(6) = 1.0 > 0.5 -> PFMFT 正常触发
+- APOLLO 查找表拿到合理参考温度 -> 阈值不再返回垃圾值
+- Group 1 重新参与置信度计算
 
-| BUG | 描述 | 文件 | 状态 |
-|-----|------|------|------|
-| BUG-2 | relaz 传真实值 | scripts/run_fortran_only.py | ✅ |
-| BUG-3 | snow_mask 传真实值 | scripts/run_fortran_only.py | ⛔ 缺少NISE数据 |
-| BUG-5 | 沙漠判断用离散列表 | src/fortran/c_api/cloudmask_c_api.f90 | ✅ |
+#### FIX-B/C: ocean PFMFT 置信度恢复
 
-**v3.4.5 变更**:
-- BUG-2: `read_geo_data` 现在从 saa/vaa 计算相对方位角 relaz，不再传零
-- BUG-5: 沙漠判断从简单范围 `eco 7-10,16` 改为完整原始逻辑（全球+高海拔+非洲+欧亚+澳大利亚+新西兰排除）
-- BUG-3: 无法修复 — `/data` 下未找到 NISE 雪冰掩码数据
+```fortran
+! ocean_day.f90 和 ocean_nite.f90，取消注释：
+call conf_test(tv11_12,pfmft_ocean(1),pfmft_ocean(3),pfmft_ocean(4), &
+               pfmft_ocean(2),1,c2)
+cmin1 = min(cmin1,c2)
+ngtests(1) = ngtests(1) + 1
+```
 
-**v3.4.5 MYD35 验证结果**: 与 v3.4.4 基本一致（精度变化 <0.5pp），因为 relaz/沙漠修复主要影响热带中纬度，2020-03-08 轨道以极地为主
+#### FIX-D: ocean APOLLO 禁用
 
-### v3.5.0 (改善检测灵敏度，需重新标定)
+```fortran
+! ocean_day.f90 和 ocean_nite.f90，在 APOLLO 调用前加门控：
+if (.false.) then   ! APOLLO disabled for MERSI-II
+  call tview(1,schi,r24,diftemp)
+  ...
+end if
+dfthrsh = do11_12hi(1)   ! 直接用静态阈值
+```
 
-| BUG | 描述 | 文件 |
-|-----|------|------|
-| BUG-10 | APOLLO 测试重新标定 | 所有 .f90 测试路径 |
-| BUG-11 | pfmft/nfmft 解注释 + 重新标定阈值 | 所有 .f90 测试路径 |
+**预期效果**:
+- Group 1 重新产生置信度贡献（pfmft 测试生效）
+- Group 2 的 11-12um 测试不再受 APOLLO 垃圾阈值干扰
+- Confidence 分布从 0.5 附近集中变为更明确的 0/1 分布
+- Agreement 预期从 46% 提升到 65%+
+
+### v3.5.2 (补充数据源)
+
+| 修复项 | 描述 | 依赖 |
+|--------|------|------|
+| FIX-E | snow_mask 传入真实 NISE 数据 | NISE 雪冰掩码产品 |
+| FIX-F | btclr 改用 RTM 计算值替代 sfctmp 估算 | NWP RTM 模块 |
+
+### v3.6.0 (阈值重新标定)
+
+| 修复项 | 描述 | 依赖 |
+|--------|------|------|
+| FIX-G | nfmft 阈值重新标定 (-23~-22K -> 合理范围) | MERSI-II 统计分析 |
+| FIX-H | ocean_nite 11-4um 阈值调宽 (2.25K -> 5K+) | 验证数据 |
+| FIX-I | GEMI 除零保护 | 代码修改 |
+| FIX-J | APOLLO 表为 MERSI-II 重新标定 | 统计分析 |
 
 ---
 
-## 当前工作目录状态
+## 验证方案
 
+### 快速验证 (v3.5.1 后)
+
+1. 在 process_pixel_c 中添加诊断输出：
+```fortran
+if (ielem_in == 1000 .and. iline_in == 1000) then
+    write(0,*) 'DEBUG: confdnc=', confdnc, ' mask=', out_mask
+    write(0,*) 'DEBUG: btclr(5)=', btclr_in(5), ' btclr(6)=', btclr_in(6)
+end if
 ```
-On branch main
-Your branch is up to date with 'origin/main'.
 
-Changes not staged for commit:
-  modified:   .claude/settings.local.json
-  modified:   ext/build/fortran_modules/cloudmask_c_api_mod.mod
-  modified:   plans/goals.md
-  deleted:    plans/original_vs_new_diff.md
+2. 运行 2020-03-08 数据，检查：
+   - btclr(5) 不再为 0（应为 250-310K）
+   - PFMFT 触发率 > 0%（之前为 0%）
+   - Confidence 分布不再集中在 0.5 附近
+   - Agreement 提升到 65%+
 
-Untracked files:
-  scripts/diag_pfmft_nfmft.py
-  scripts/diag_run_fortran.py
-  scripts/process_20200308_btclr.py
-  scripts/process_20200308_f90.py
-  scripts/test_btclr_fix.py
-```
+### 完整验证
+
+- 7 个测试日期（20220803~20250302）全轨道验证
+- 与 MYD35 对比：Agreement、HSS、混淆矩阵
+- 空间分布图：检查椒盐是否消除
