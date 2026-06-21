@@ -188,7 +188,6 @@ FCOMPILE "$CORE_DIR/data_arrays_module.f90"
 FCOMPILE "$CORE_DIR/platform_module.f90"
 FCOMPILE "$CORE_DIR/constant.f90"
 FCOMPILE "$CORE_DIR/numerical.f90"
-FCOMPILE "$CORE_DIR/planck_module.f90"
 FCOMPILE "$CORE_DIR/frontend_module.f90"
 
 # --- Modified cloudmask_data_arrays (threadprivate) from c_api/ ---
