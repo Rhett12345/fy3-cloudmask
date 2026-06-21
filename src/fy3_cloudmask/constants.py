@@ -31,11 +31,11 @@ VIS_WAVELENGTHS_UM = np.array([
 ], dtype=np.float64)
 
 IR_WAVELENGTHS_UM = np.array([
-    3.800, 4.050, 7.230, 8.560, 10.710, 11.950,
+    3.796, 4.046, 7.233, 8.560, 10.714, 11.948,
 ], dtype=np.float64)
 
 IR_WAVENUMBERS_CM = np.array([
-    2643.0, 2472.0, 1383.0, 1168.0, 933.0, 837.0,
+    2634.352, 2471.577, 1382.552, 1168.224, 933.358, 836.960,
 ], dtype=np.float64)
 
 # Channel flags: 0 = VIS, 1 = IR (30 elements, first 19=VIS, next 6=IR, rest unused)

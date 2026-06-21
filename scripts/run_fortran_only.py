@@ -31,14 +31,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 # ---- Planck constants for BT conversion ----
-H_PLANCK = 6.62606876e-34
-C_LIGHT = 2.99792458e+08
-K_BOLTZMANN = 1.3806503e-23
-C1_PLANCK = 2.0 * H_PLANCK * C_LIGHT * C_LIGHT
-C2_PLANCK = H_PLANCK * C_LIGHT / K_BOLTZMANN
-IR_WAVENUMBERS = np.array([2643.4359, 2471.654, 1382.621, 1168.182, 909.458, 836.941])
-TCS_FY3D = np.array([0.9992917440, 0.9994814177, 0.9989956900, 0.9997135336, 0.9980397975, 0.9983777125])
-TCI_FY3D = np.array([0.50718071650, 0.3493280160, 0.40925130837, 0.1014073981, 0.57633464244, 0.4317181810])
+# c1 = 1.19104e-5 mW/(m²·sr·cm⁻⁴), c2 = 1.43877 cm·K
+# RAD = (DN + intercept) * slope [mW/(m²·sr·cm⁻¹)]
+# Te = c2 * nu / ln(c1 * nu^3 / RAD + 1)
+# Tbb = A * Te + B   (TBB_Trans_Coefficient)
+C1_MW = 1.19104e-5
+C2_CM = 1.43877
 
 # ---- Confirmed test dates with complete L1B+GEO+NWP triplets ----
 CONFIRMED_DATES = [
@@ -79,6 +77,10 @@ def read_l1b_data(
         intercept_250 = f['Data/EV_250_Aggr.1KM_Emissive'].attrs['Intercept']
         slope_1km = f['Data/EV_1KM_Emissive'].attrs['Slope']
         intercept_1km = f['Data/EV_1KM_Emissive'].attrs['Intercept']
+        # Read wavelength for wavenumber computation and TBB correction coefficients
+        wl = f.attrs['Effect_Center_WaveLength'][:]
+        tbb_a = f.attrs['TBB_Trans_Coefficient_A'][:]
+        tbb_b = f.attrs['TBB_Trans_Coefficient_B'][:]
 
     n_pixel, n_line = 2048, 2000
     pxldat = np.zeros((n_pixel, n_line, 25), dtype=np.float64)
@@ -106,25 +108,26 @@ def read_l1b_data(
             refl = (c0 + c1 * dn + c2 * dn * dn) * 0.01 / esd2
         pxldat[:, :, b + 4] = np.clip(refl, -0.1, 2.0).T
 
+    # IR 250m aggregated channels -> pxldat indices 23, 24 -> IR indices 4, 5
     for b in range(2):
-        radiance_mw = (ir_250[b] + intercept_250[b]) * slope_250[b]
-        radiance_mw = np.maximum(radiance_mw, 0.01)
-        wvn = IR_WAVENUMBERS[b + 4]
-        vs = 100.0 * wvn
-        bt_raw = C2_PLANCK * vs / np.log(C1_PLANCK * vs ** 3 / (1e-5 * radiance_mw) + 1.0)
-        bt = (bt_raw - TCI_FY3D[b + 4]) / TCS_FY3D[b + 4]
-        bt = np.clip(bt, 150.0, 350.0)
+        ir_idx = b + 4
+        rad_mw = (ir_250[b] + intercept_250[b]) * slope_250[b]
+        rad_mw = np.maximum(rad_mw, 0.01)
+        nu = 10000.0 / wl[23 + b]
+        Te = C2_CM * nu / np.log(C1_MW * nu ** 3 / rad_mw + 1.0)
+        Tbb = tbb_a[ir_idx] * Te + tbb_b[ir_idx]
+        bt = np.clip(Tbb, 150.0, 350.0)
         bt[bt <= 150.05] = -999.0
         pxldat[:, :, b + 23] = bt.T
 
+    # IR 1km channels -> pxldat indices 19-22 -> IR indices 0-3
     for b in range(4):
-        radiance_mw = (ir_1km[b] + intercept_1km[b]) * slope_1km[b]
-        radiance_mw = np.maximum(radiance_mw, 0.01)
-        wvn = IR_WAVENUMBERS[b]
-        vs = 100.0 * wvn
-        bt_raw = C2_PLANCK * vs / np.log(C1_PLANCK * vs ** 3 / (1e-5 * radiance_mw) + 1.0)
-        bt = (bt_raw - TCI_FY3D[b]) / TCS_FY3D[b]
-        bt = np.clip(bt, 150.0, 350.0)
+        rad_mw = (ir_1km[b] + intercept_1km[b]) * slope_1km[b]
+        rad_mw = np.maximum(rad_mw, 0.01)
+        nu = 10000.0 / wl[19 + b]
+        Te = C2_CM * nu / np.log(C1_MW * nu ** 3 / rad_mw + 1.0)
+        Tbb = tbb_a[b] * Te + tbb_b[b]
+        bt = np.clip(Tbb, 150.0, 350.0)
         bt[bt <= 150.05] = -999.0
         pxldat[:, :, b + 19] = bt.T
 
