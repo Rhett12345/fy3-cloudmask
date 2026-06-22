@@ -220,20 +220,35 @@ def interpolate_nwp(nwp: dict, lat_px: np.ndarray, lon_px: np.ndarray) -> dict:
     return fields
 
 
-def _estimate_btclr(sfctmp: np.ndarray, n_elem: int, n_line: int) -> np.ndarray:
+def _estimate_btclr(sfctmp: np.ndarray, lsf: np.ndarray,
+                    n_elem: int, n_line: int) -> np.ndarray:
     """Estimate clear-sky brightness temperatures from surface temperature.
 
     btclr channels: [3.8um, 4.0um, 7.3um, 8.6um, 11um, 12um, spare]
-    The split-window difference btclr(5)-btclr(6) ~2K enables PFMFT triggering.
+    Uses surface-type-dependent offsets to match observed BTD:
+      Ocean: BTD_clr ≈ 0.5K,  Land: BTD_clr ≈ 1.9K
     """
     bt = np.zeros((n_elem, n_line, 7), dtype=np.float32)
-    bt[:, :, 0] = sfctmp - 30.0   # 3.8um (solar+thermal)
-    bt[:, :, 1] = sfctmp - 20.0   # 4.0um
-    bt[:, :, 2] = 245.0           # 7.3um water vapor band
-    bt[:, :, 3] = sfctmp - 12.0   # 8.6um
-    bt[:, :, 4] = sfctmp - 3.0    # 11um window
-    bt[:, :, 5] = sfctmp - 5.5    # 12um window (BTD ~2.5K > 0.5K)
-    bt[:, :, 6] = 0.0             # spare
+    ocean = (lsf == 0)
+    land = (lsf != 0)
+
+    # Ocean: more water vapor → smaller atmospheric correction
+    bt[ocean, 0] = sfctmp[ocean] - 30.0
+    bt[ocean, 1] = sfctmp[ocean] - 20.0
+    bt[ocean, 2] = 245.0
+    bt[ocean, 3] = sfctmp[ocean] - 12.0
+    bt[ocean, 4] = sfctmp[ocean] - 5.6    # 11um ocean
+    bt[ocean, 5] = sfctmp[ocean] - 6.1    # 12um ocean  (BTD_clr=0.5K)
+
+    # Land: drier → larger split-window difference
+    bt[land, 0] = sfctmp[land] - 30.0
+    bt[land, 1] = sfctmp[land] - 20.0
+    bt[land, 2] = 245.0
+    bt[land, 3] = sfctmp[land] - 12.0
+    bt[land, 4] = sfctmp[land] - 9.9     # 11um land
+    bt[land, 5] = sfctmp[land] - 11.8    # 12um land  (BTD_clr=1.9K)
+
+    bt[:, :, 6] = 0.0  # spare
     return np.ascontiguousarray(bt)
 
 
@@ -320,7 +335,7 @@ def run_single_orbit(
         eco=np.ascontiguousarray(geo['eco_type'].astype(np.int8)),
         lsf=np.ascontiguousarray(geo['lsf'].astype(np.int8)),
         snow_mask=np.ascontiguousarray(np.zeros((n_elem, n_line), dtype=np.int8)),
-        btclr=_estimate_btclr(nwp_interp['tsfc'], n_elem, n_line),
+        btclr=_estimate_btclr(nwp_interp['tsfc'], geo['lsf'].astype(np.int8), n_elem, n_line),
         n_elem=n_elem, n_line=n_line,
     )
     t_fortran = time.time() - t0
