@@ -46,7 +46,7 @@ py::array_t<T> transpose_2d(py::array_t<T> arr, int nElem, int nLine) {
             int iEnd = std::min(ii + BLOCK, nElem);
             for (int j = jj; j < jEnd; j++) {
                 for (int i = ii; i < iEnd; i++) {
-                    dst[i * nLine + j] = src[j * nElem + i];
+                    dst[j * nElem + i] = src[i * nLine + j];
                 }
             }
         }
@@ -72,7 +72,7 @@ py::array_t<T> transpose_3d(py::array_t<T> arr, int nElem, int nLine, int K) {
             int iEnd = std::min(ii + BLOCK, nElem);
             for (int j = jj; j < jEnd; j++) {
                 for (int i = ii; i < iEnd; i++) {
-                    const T* src_px = src + (j * nElem + i) * K;
+                    const T* src_px = src + (i * nLine + j) * K;
                     for (int k = 0; k < K; k++) {
                         dst[(k * nLine + j) * nElem + i] = src_px[k];
                     }
@@ -205,6 +205,99 @@ py::dict process_swath_py(
 }
 
 
+// ============================================================================
+// Transpose verification (test-only, returns pass/fail dict)
+// ============================================================================
+
+py::dict verify_transpose_py(int nElem, int nLine) {
+    auto np = py::module_::import("numpy");
+    py::dict result;
+
+    // --- 2D verification ---
+    // Create C-order (nElem, nLine) with arr[i,j] = 10000*i + j
+    auto arr2d = py::array_t<int>({nElem, nLine});
+    auto arr2d_buf = arr2d.request();
+    int* arr2d_ptr = static_cast<int*>(arr2d_buf.ptr);
+    for (int i = 0; i < nElem; i++)
+        for (int j = 0; j < nLine; j++)
+            arr2d_ptr[i * nLine + j] = 10000 * i + j;
+
+    auto arr2d_f = transpose_2d<int>(arr2d, nElem, nLine);
+    auto arr2d_f_buf = arr2d_f.request();
+    int* arr2d_f_ptr = static_cast<int*>(arr2d_f_buf.ptr);
+
+    bool pass_2d = true;
+    for (int i = 0; i < nElem && pass_2d; i++)
+        for (int j = 0; j < nLine && pass_2d; j++)
+            if (arr2d_f_ptr[j * nElem + i] != 10000 * i + j)
+                pass_2d = false;
+
+    result["pass_2d"] = pass_2d;
+
+    // --- 2D round-trip: Fortran order -> C-order (via reshape with order='F') ---
+    auto flat_2d = py::array_t<int>(nElem * nLine);
+    std::memcpy(flat_2d.mutable_data(), arr2d_f_ptr, nElem * nLine * sizeof(int));
+    auto arr2d_rt_f = np.attr("reshape")(flat_2d, py::make_tuple(nElem, nLine), py::arg("order") = "F");
+    auto arr2d_rt = py::cast<py::array_t<int>>(
+        np.attr("ascontiguousarray")(arr2d_rt_f)
+    );
+    auto arr2d_rt_buf = arr2d_rt.request();
+    int* arr2d_rt_ptr = static_cast<int*>(arr2d_rt_buf.ptr);
+
+    bool pass_2d_rt = true;
+    for (int i = 0; i < nElem && pass_2d_rt; i++)
+        for (int j = 0; j < nLine && pass_2d_rt; j++)
+            if (arr2d_rt_ptr[i * nLine + j] != 10000 * i + j)
+                pass_2d_rt = false;
+
+    result["pass_2d_roundtrip"] = pass_2d_rt;
+
+    // --- 3D verification ---
+    int K = 7;  // use K=7 like btclr
+    auto arr3d = py::array_t<int>({nElem, nLine, K});
+    auto arr3d_buf = arr3d.request();
+    int* arr3d_ptr = static_cast<int*>(arr3d_buf.ptr);
+    for (int i = 0; i < nElem; i++)
+        for (int j = 0; j < nLine; j++)
+            for (int k = 0; k < K; k++)
+                arr3d_ptr[(i * nLine + j) * K + k] = 10000 * i + 10 * j + k;
+
+    auto arr3d_f = transpose_3d<int>(arr3d, nElem, nLine, K);
+    auto arr3d_f_buf = arr3d_f.request();
+    int* arr3d_f_ptr = static_cast<int*>(arr3d_f_buf.ptr);
+
+    bool pass_3d = true;
+    for (int i = 0; i < nElem && pass_3d; i++)
+        for (int j = 0; j < nLine && pass_3d; j++)
+            for (int k = 0; k < K && pass_3d; k++)
+                if (arr3d_f_ptr[(k * nLine + j) * nElem + i] != 10000 * i + 10 * j + k)
+                    pass_3d = false;
+
+    result["pass_3d"] = pass_3d;
+
+    // --- 3D round-trip: Fortran order -> C-order ---
+    auto flat_3d = py::array_t<int>(nElem * nLine * K);
+    std::memcpy(flat_3d.mutable_data(), arr3d_f_ptr, nElem * nLine * K * sizeof(int));
+    auto arr3d_rt_f = np.attr("reshape")(flat_3d, py::make_tuple(nElem, nLine, K), py::arg("order") = "F");
+    auto arr3d_rt = py::cast<py::array_t<int>>(
+        np.attr("ascontiguousarray")(arr3d_rt_f)
+    );
+    auto arr3d_rt_buf = arr3d_rt.request();
+    int* arr3d_rt_ptr = static_cast<int*>(arr3d_rt_buf.ptr);
+
+    bool pass_3d_rt = true;
+    for (int i = 0; i < nElem && pass_3d_rt; i++)
+        for (int j = 0; j < nLine && pass_3d_rt; j++)
+            for (int k = 0; k < K && pass_3d_rt; k++)
+                if (arr3d_rt_ptr[(i * nLine + j) * K + k] != 10000 * i + 10 * j + k)
+                    pass_3d_rt = false;
+
+    result["pass_3d_roundtrip"] = pass_3d_rt;
+
+    return result;
+}
+
+
 PYBIND11_MODULE(_cloudmask_native, m) {
     m.doc() = R"doc(
         FY-3D MERSI-II Cloud Mask Engine -- Native C++/Fortran backend.
@@ -292,6 +385,10 @@ PYBIND11_MODULE(_cloudmask_native, m) {
         )doc"
     );
 
-    m.attr("__version__") = "3.2.0";
+    m.attr("__version__") = "3.6.0";
     m.attr("__backend__") = "C++/Fortran (OpenMP)";
+
+    m.def("verify_transpose", &verify_transpose_py,
+        py::arg("nElem"), py::arg("nLine"),
+        "Verify C-to-Fortran transpose correctness (2D + 3D round-trip). Returns dict of pass/fail.");
 }
